@@ -3,6 +3,7 @@ package de.intranda.goobi.plugins;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.file.Path;
 
 /**
  * This file is part of a plugin for Goobi - a Workflow tool for the support of mass digitization.
@@ -25,6 +26,7 @@ import java.io.OutputStream;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
 
 import org.apache.commons.configuration.SubnodeConfiguration;
@@ -33,6 +35,8 @@ import org.apache.jena.datatypes.xsd.XSDDatatype;
 import org.apache.jena.rdf.model.Model;
 import org.apache.jena.rdf.model.ModelFactory;
 import org.apache.jena.rdf.model.Resource;
+import org.apache.jena.rdf.model.Statement;
+import org.apache.jena.rdf.model.StmtIterator;
 import org.apache.jena.riot.RDFDataMgr;
 import org.apache.jena.riot.RDFFormat;
 import org.goobi.beans.Process;
@@ -138,6 +142,20 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         String dateOfOrigin = null;
         DocStruct logical = null;
         DocStruct anchor = null;
+        Map<Path, List<Path>> files = process.getAllFolderAndFiles();
+        Path masterFolder = null;
+        Path mediaFolder = null;
+        Path altoFolder = null;
+
+        for (Path p : files.keySet()) {
+            if (p.getFileName().toString().endsWith("_alto")) {
+                altoFolder = p;
+            } else if (p.getFileName().toString().contains("master")) {
+                masterFolder = p;
+            } else if (p.getFileName().toString().endsWith("_media")) {
+                mediaFolder = p;
+            }
+        }
         try {
             Fileformat fileformat = process.readMetadataFile();
             DigitalDocument dd = fileformat.getDigitalDocument();
@@ -152,8 +170,23 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         }
 
         if (logical == null) {
+            // metadata not readable
             return PluginReturnValue.ERROR;
         }
+
+        if (masterFolder == null) {
+            // master folder is missing or empty
+            return PluginReturnValue.ERROR;
+        }
+        if (mediaFolder == null) {
+            // TODO is this required?
+            return PluginReturnValue.ERROR;
+        }
+        if (altoFolder == null) {
+            // TODO is this required?
+            return PluginReturnValue.ERROR;
+        }
+
         for (Metadata md : logical.getAllMetadata()) {
             switch (md.getType().getName()) {
                 case "TitleDocMainShort":
@@ -215,24 +248,8 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
         model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
         model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
-        // retrieve metadata on top level, update if it exists
-        //        String downloadUrl = topCollectionIdentifier + "/metadata";
-        //
-        //        if (false) {
-        //            String inputFileName = "";
-        //            InputStream in = RDFDataMgr.open(inputFileName);
-        //            model.read(in, null);
-        //
-        //            // update hasCoverageStartDate + hasCoverageEndDate
-        //
-        //            //        hasCoverageStartDate -> update if current process has an older PublicationYear than the submitted one, otherwise keep it//TODO
-        //
-        //        } else {
-        // if not, create metadata on project level
+
         Resource topCollection = createTopCollectionDocument(model, topCollectionIdentifier, languageCode);
-
-        //        }
-
         try (
                 OutputStream out = new FileOutputStream("/tmp/project.ttl")) {
             RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
@@ -241,7 +258,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         }
 
         // process level
-        String collectionIdentifier = topCollectionIdentifier + "/" + id;
+        String collectionIdentifier = topCollectionIdentifier + "/" + process.getTitel();
 
         model = ModelFactory.createDefaultModel();
 
@@ -249,6 +266,220 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
         model.setNsPrefix("top", topCollectionIdentifier);
 
+        Resource processResource = createCollectionResource(sortTitle, orderNumber, maintitle, subtitle, id, shelfmark, language, license,
+                publicationyear, handle, logical, files, masterFolder, languageCode, dateIsInferred, dateIsUncertain, model, collectionIdentifier);
+
+        try (OutputStream out = new FileOutputStream("/tmp/process.ttl")) {
+            RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
+        } catch (IOException e) {
+            log.error(e);
+        }
+
+        model = ModelFactory.createDefaultModel();
+        model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
+        model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
+        model.setNsPrefix("top", topCollectionIdentifier);
+        Resource masterResource = getFolderResource(model, masterFolder, collectionIdentifier, processResource);
+        try (OutputStream out = new FileOutputStream("/tmp/masterFolder.ttl")) {
+            RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
+        } catch (IOException e) {
+            log.error(e);
+        }
+        model = ModelFactory.createDefaultModel();
+        model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
+        model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
+        model.setNsPrefix("top", topCollectionIdentifier);
+        Resource mediaResource = getFolderResource(model, mediaFolder, collectionIdentifier, processResource);
+        try (OutputStream out = new FileOutputStream("/tmp/mediaFolder.ttl")) {
+            RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
+        } catch (IOException e) {
+            log.error(e);
+        }
+        model = ModelFactory.createDefaultModel();
+        model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
+        model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
+        model.setNsPrefix("top", topCollectionIdentifier);
+        Resource altoResource = getFolderResource(model, altoFolder, collectionIdentifier, processResource);
+        try (OutputStream out = new FileOutputStream("/tmp/altoFolder.ttl")) {
+            RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
+        } catch (IOException e) {
+            log.error(e);
+        }
+
+        if (anchor != null) {
+            model = ModelFactory.createDefaultModel();
+            model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
+            model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
+            model.setNsPrefix("top", topCollectionIdentifier);
+            createMetadata(anchor, model, collectionIdentifier, processResource);
+            try (OutputStream out = new FileOutputStream("/tmp/meta_anchor.ttl")) {
+                RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
+            } catch (IOException e) {
+                log.error(e);
+            }
+        }
+        model = ModelFactory.createDefaultModel();
+        model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
+        model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
+        model.setNsPrefix("top", topCollectionIdentifier);
+        createMetadata(logical, model, collectionIdentifier, processResource);
+        try (OutputStream out = new FileOutputStream("/tmp/meta.ttl")) {
+            RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
+        } catch (IOException e) {
+            log.error(e);
+        }
+
+        // for each file within folder
+
+        for (Entry<Path, List<Path>> entry : files.entrySet()) {
+            for (Path file : entry.getValue()) {
+                createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource, entry, file);
+            }
+        }
+
+        // topstruct
+        //        hasTitle    1       langString  1   TitleDocMain + " : " + TitleDocSub1
+        //        hasIdentifier   1-n     Thing   3   --- See note ---    Build identifier according to form https://id.acdh.oeaw.ac.at/pub-AC02277063, where the last segment of the URI includes the AC identifier from "CatalogIDDigital", prefixed with "pub-"
+        //        hasNonLinkedIdentifier  0-n     string  4   CatalogIDDigital    e.g. "AC02277063"
+        //        hasNonLinkedIdentifier  0-n     string  4   shelfmarksource e.g. "R-III: WE 379"
+        //        hasCity 0-n     langString  24  PlaceOfPublication  The object of this property should always be a string.
+        //        hasUrl  0-n     anyURI  30  --- See note ---    Should be the URL of the object in Goobi Viewer, e.g. https://viewer.acdh.oeaw.ac.at/viewer/image/AC02277063
+        //        hasDescription  0-n     langString  40  Note    I see that the values for Note are often separated in different strings. Maybe we need to concatenate them, or at least discuss how to best approach them.
+        //        hasDescription  0-n     langString  40  --- See note ---    """We would like to insert here a note about the uncertainty of the date provided in the ARCHE property """"hasDate"""". Therefore, if the Goobi field """"DateOfOrigin"""" presents square brackets (e.g. [1862]), then add acdh:hasNote """"Date is inferred.""""@en, """"Datum ist abgeleitet.""""@de
+        //        If the Goobi field """"DateOfOrigin"""" presents square brackets and a question mark (e.g. [1862?]), then add acdh:hasNote """"Date is inferred and uncertain.""""@en, """"Datum abgeleitet und unsicher.""""@de
+        //        If possible, it would be nice to have something like a checkbox in the Goobi interface, where one can specifiy if a date is uncertain and/or inferred from external source."""
+        //        hasLanguage 0-n     Concept 41  DocLanguage Values should be mapped to the controlled vocabulary used by ARCHE: https://vocabs.acdh.oeaw.ac.at/iso6393/
+        //        hasExtent   0-1     langString  46  SizeSourcePrint
+        //        hasSeriesInformation    0-1     langString  58  CurrentNo
+        //        hasNote 0-1     langString  59  OnTheContent
+        //        hasAuthor   0-n     Agent   73  Creator Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+        //        hasAuthor   0-n     Agent   73  Cartographer    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+        //        hasAuthor   0-n     Agent   73  Artist  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+        //        hasAuthor   0-n     Agent   73  Author  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+        //        hasEditor   0-n     Agent   74  Editor  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+        //        hasContributor  0-n     Agent   75  OtherPerson Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+        //        hasContributor  0-n     Agent   75  Lithographer    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+        //        hasContributor  0-n     Agent   75  Engraver    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+        //        hasContributor  0-n     Agent   75  Contributor Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+        //        hasContributor  0-n     Agent   75  Printer Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+        //        hasContributor  0-n     Agent   75  PublisherPerson Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+        //        hasPublisher    0-n     string  77  PublisherName
+        //        hasIssuedDate   0-1     date    129 PublicationYear
+        //        isSourceOf  0-n     ContainerOrReMe 148 --- See note ---    Add here the ARCHE identifier of the related Process, e.g. https://id.acdh.oeaw.ac.at/woldan/RIIIWE3793
+        //        isPartOf    0-n     CollectionOrPlaceOrPublication  151 --- See note ---    In case the Process includes an anchor publication, set the value to the identifier of the anchor publication, which can be taken from field "CatalogIDDigital" with attribute anchorId="true"
+        //        hasAvailableDate    1   1   dateTime    171 --- Will be automatically filled in.
+        //        hasUpdatedDate  0-1 1   dateTime    187 --- Will be automatically filled in.
+        //        aclRead 0-n 1   string  911 --- Will be automatically filled in.
+        //        aclUpdate   0-n 1   string  912 --- Will be automatically filled in.
+        //        aclWrite    0-n 1   string  913 --- Will be automatically filled in.
+        //        createdBy   0-n 1   string  914 --- Will be automatically filled in.
+        //        hasBinaryUpdatedRole    0-n 1   string  940 --- Will be automatically filled in.
+        //        hasUpdatedRole  0-n 1   string  945 --- Will be automatically filled in.
+
+        if (anchor != null) {
+            //        hasTitle    1       langString  1   TitleDocMain + " : " + TitleDocSub1
+            //        hasIdentifier   1-n     Thing   3   --- See note ---    Build identifier according to form https://id.acdh.oeaw.ac.at/pub-AC00915891, where the last segment of the URI includes the AC identifier from "CatalogIDDigital", prefixed with "pub-"
+            //        hasNonLinkedIdentifier  0-n     string  4   CatalogIDDigital    e.g. "AC00915891"
+            //        hasNonLinkedIdentifier  0-n     string  4   shelfmarksource e.g. "R-III: WE 379"
+            //        hasCity 0-n     langString  24  PlaceOfPublication  The object of this property should always be a string.
+            //        hasUrl  0-n     anyURI  30  --- See note ---    Should be the URL of the object in Goobi Viewer, e.g. https://viewer.acdh.oeaw.ac.at/viewer/toc/AC00915891
+            //        hasDescription  0-n     langString  40  OnTheContent
+            //        hasDescription  0-n     langString  40  --- See note ---    """We would like to insert here a note about the uncertainty of the date provided in the ARCHE property """"hasDate"""". Therefore, if the Goobi field """"DateOfOrigin"""" presents square brackets (e.g. [1862]), then add acdh:hasNote """"Date is inferred.""""@en, """"Datum ist abgeleitet.""""@de
+            //        If the Goobi field """"DateOfOrigin"""" presents square brackets and a question mark (e.g. [1862?]), then add acdh:hasNote """"Date is inferred and uncertain.""""@en, """"Datum abgeleitet und unsicher.""""@de
+            //        If possible, it would be nice to have something like a checkbox in the Goobi interface, where one can specifiy if a date is uncertain and/or inferred from external source."""
+            //        hasLanguage 0-n     Concept 41  DocLanguage Values should be mapped to the controlled vocabulary used by ARCHE: https://vocabs.acdh.oeaw.ac.at/iso6393/
+            //        hasExtent   0-1     langString  46  SizeSourcePrint
+            //        hasSeriesInformation    0-1     langString  58  CurrentNo
+            //        hasNote 0-1     langString  59  Note
+            //        hasAuthor   0-n     Agent   73  Author  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+            //        hasAuthor   0-n     Agent   73  Creator Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+            //        hasAuthor   0-n     Agent   73  Cartographer    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+            //        hasAuthor   0-n     Agent   73  Artist  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+            //        hasEditor   0-n     Agent   74  Editor  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+            //        hasContributor  0-n     Agent   75  Contributor Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+            //        hasContributor  0-n     Agent   75  OtherPerson Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+            //        hasContributor  0-n     Agent   75  Lithographer    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+            //        hasContributor  0-n     Agent   75  Engraver    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+            //        hasContributor  0-n     Agent   75  Printer Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+            //        hasContributor  0-n     Agent   75  PublisherPerson Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+            //        hasPublisher    0-n     string  77  PublisherName
+            //        hasIssuedDate   0-1     date    129 PublicationYear
+            //        hasAvailableDate    1   1   dateTime    171 --- Will be automatically filled in.
+            //        hasUpdatedDate  0-1 1   dateTime    187 --- Will be automatically filled in.
+            //        aclRead 0-n 1   string  911 --- Will be automatically filled in.
+            //        aclUpdate   0-n 1   string  912 --- Will be automatically filled in.
+            //        aclWrite    0-n 1   string  913 --- Will be automatically filled in.
+            //        createdBy   0-n 1   string  914 --- Will be automatically filled in.
+            //        hasBinaryUpdatedRole    0-n 1   string  940 --- Will be automatically filled in.
+            //        hasUpdatedRole  0-n 1   string  945 --- Will be automatically filled in.
+        }
+
+        boolean successful = true;
+        // your logic goes here
+
+        log.info("ArcheExport step plugin executed");
+        if (!successful) {
+            return PluginReturnValue.ERROR;
+        }
+        return PluginReturnValue.FINISH;
+    }
+
+    private void createFileResource(String id, String topCollectionIdentifier, String collectionIdentifier, Resource processResource,
+            Entry<Path, List<Path>> entry, Path file) {
+        Model model;
+        model = ModelFactory.createDefaultModel();
+        model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
+        model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
+        model.setNsPrefix("top", topCollectionIdentifier);
+        String folderName = entry.getKey().getFileName().toString();
+        String filename = file.getFileName().toString();
+        Resource resource = model.createResource(id, model.createResource(model.getNsPrefixURI("acdh") + "Resources"));
+        //        hasAvailableDate    1   1   dateTime    171 --- Will be automatically filled in.
+        //        hasCategory 1-n     Concept 47  --- See note ---    "For images: set to https://vocabs.acdh.oeaw.ac.at/archecategory/image
+        //        For XML ALTO: set to https://vocabs.acdh.oeaw.ac.at/archecategory/dataset"
+        if (filename.endsWith(".xml")) {
+            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasCategory"),
+                    model.createResource("https://vocabs.acdh.oeaw.ac.at/archecategory/dataset"));
+        } else {
+            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasCategory"),
+                    model.createResource("https://vocabs.acdh.oeaw.ac.at/archecategory/image"));
+        }
+        //        hasCurator  0-n     Agent   178 --- See note ---    Inherit value from the containing Process
+        inheritValue(model, processResource, resource, "hasCurator");
+        //        hasDepositor    1-n     Agent   170 --- See note ---    Inherit value from the containing Process
+        inheritValue(model, processResource, resource, "hasDepositor");
+        //        hasHosting  1-n 1   Agent   179 --- Will be automatically filled in.
+        //        hasIdentifier   1-n     Thing   3   --- See note ---    Use identifier in the form https://id.acdh.oeaw.ac.at/woldan/RIIIWE3793/RIIIWE3793_master/RIIIWE3793_master_0001.tif (where the last segment of the URI corresponds to the relative filename / title of the Resource).
+        String fileId = collectionIdentifier + "/" + folderName + "/" + filename;
+        resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasIdentifier"), model.createResource(fileId));
+        //        hasPid  0-n     anyURI  172 --- See note ---    Use as object the Handle reserved through the GWDG PID-Webservice
+        // TODO check for handles on image level, leave it blank if missing
+        //        hasLicense  1       Concept 113 --- See note ---    Inherit value from the containing Process
+        inheritValue(model, processResource, resource, "hasLicense");
+        //        hasLicensor 1-n     Agent   112 --- See note ---    Inherit value from the containing Process
+        inheritValue(model, processResource, resource, "hasLicensor");
+        //        hasMetadataCreator  1-n     Agent   80  --- See note ---    Inherit value from the containing Process
+        inheritValue(model, processResource, resource, "hasMetadataCreator");
+        //        hasOwner    1-n     Agent   110 --- See note ---    Inherit value from the containing Process
+        inheritValue(model, processResource, resource, "hasOwner");
+        //        hasRightsHolder 1-n     Agent   111 --- See note ---    Inherit value from the containing Process
+        inheritValue(model, processResource, resource, "hasRightsHolder");
+        //        hasTitle    1       langString  1   --- See note ---    Should be in the form "RIIIWE3793_master_0001.tif" or "RIIIWE3793_media_0001.tif" or "RIIIWE3793_0001.xml" (for XML ALTO files)
+        resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasTitle"), filename, "en");
+        //        isPartOf    1-n     CollectionOrPlaceOrPublication  151 --- See note ---    Should have as object the containing collection (e.g., https://id.acdh.oeaw.ac.at/woldan/RIIIWE3793/RIIIWE3793_master)
+        resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "isPartOf"),
+                model.createResource(collectionIdentifier + "/" + folderName));
+
+        try (OutputStream out = new FileOutputStream("/tmp/" + folderName + "_" + filename + ".ttl")) {
+            RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
+        } catch (IOException e) {
+            log.error(e);
+        }
+    }
+
+    private Resource createCollectionResource(String sortTitle, String orderNumber, String maintitle, String subtitle, String id, String shelfmark,
+            String language, String license, String publicationyear, String handle, DocStruct logical, Map<Path, List<Path>> files, Path masterFolder,
+            String languageCode, boolean dateIsInferred, boolean dateIsUncertain, Model model, String collectionIdentifier) {
         Resource processResource = model.createResource(collectionIdentifier, model.createResource(model.getNsPrefixURI("acdh") + "Collection"));
 
         if (StringUtils.isBlank(sortTitle)) {
@@ -314,8 +545,8 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                 model.createResource("https://vocabs.acdh.oeaw.ac.at/archelifecyclestatus/completed"));
 
         //        hasExtent   0-1     langString  46  --- See note ---    We would need a string such as "544 files", where the total numer of master images is computed.
-        // TODO count images in master folder instead?
-        processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasExtent"), process.getSortHelperImages() + " images", "en");
+        processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasExtent"), files.get(masterFolder).size() + " images",
+                "en");
 
         //        hasNote 0-1     langString  59  --- See note ---    "We would like to insert here a note about the uncertainty of the date provided in the ARCHE property ""hasDate"". Therefore, if the Goobi field ""DateOfOrigin"" presents square brackets (e.g. [1862]), then add acdh:hasNote ""Date is inferred.""@en, ""Datum ist abgeleitet.""@de
         //        If the Goobi field ""DateOfOrigin"" presents square brackets and a question mark (e.g. [1862?]), then add acdh:hasNote ""Date is inferred and uncertain.""@en, ""Datum abgeleitet und unsicher.""@de
@@ -368,154 +599,116 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         if (handle != null) {
             processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasPid"), handle, XSDDatatype.XSDanyURI);
         }
+        return processResource;
+    }
 
-        // folder level, master, media, ocr
-        //        hasTitle    1       langString  1   --- See note ---    Should be in the form "RIIIWE3793_master" or "RIIIWE3793_media" or "RIIIWE3793_ocr".
-        //        hasIdentifier   1-n     Thing   3   --- See note ---    Use identifier in the form https://id.acdh.oeaw.ac.at/woldan/RIIIWE3793/RIIIWE3793_master
-        //        hasPid  0-n     anyURI  172 --- See note ---    Use as object the Handle reserved through the GWDG PID-Webservice
-        //        hasMetadataCreator  1-n     Agent   80  --- See note ---    Inherit value from the containing Process
-        //        hasOwner    1-n     Agent   110 --- See note ---    Inherit value from the containing Process
-        //        hasRightsHolder 1-n     Agent   111 --- See note ---    Inherit value from the containing Process
-        //        hasLicensor 1-n     Agent   112 --- See note ---    Inherit value from the containing Process
-        //        hasLicense  0-1     Concept 113 --- See note ---    Inherit value from the containing Process
-        //        hasLicenseSummary   1   1   string  115 --- Will be automatically filled in.
-        //        isPartOf    0-n     CollectionOrPlaceOrPublication  151 --- See note ---    Should have as object the containing collection (e.g., https://id.acdh.oeaw.ac.at/woldan/RIIIWE3793)
-        //        hasDepositor    1-n     Agent   170 --- See note ---    Inherit value from the containing Process
-        //        hasAvailableDate    1   1   dateTime    171 --- Will be automatically filled in.
-        //        hasPid  0-n     anyURI  172 --- See note ---    Use as object the Handle reserved through the GWDG PID-Webservice
-        //        hasCurator  0-n     Agent   178 --- See note ---    Inherit value from the containing Process
-        //        hasHosting  1-n 1   Agent   179 --- Will be automatically filled in.
-        //        hasDate 0-n     date    130 --- See note ---    Inherit value from the containing Process
-        //        hasOaiSet   0-n     Concept 153 --- See note ---    "Add property to Goobi at the Process level. Values should comply with controlled vocabulary https://vocabs.acdh.oeaw.ac.at/archeoaisets/
-        //        In the specific case of Woldan, ONLY instances of acdh:Collection containing the ""media"" images (e.g. https://id.acdh.oeaw.ac.at/woldan/RIIIWE3791/RIIIWE3791_media) will have the value https://vocabs.acdh.oeaw.ac.at/archeoaisets/kulturpool"
+    private Resource createMetadata(DocStruct docstruct, Model model, String collectionIdentifier, Resource processResource) {
+
+        String metadataId = null;
+
+        if (docstruct.getType().isAnchor()) {
+            metadataId = collectionIdentifier + "/" + process.getTitel() + "_meta_anchor.xml";
+        } else {
+            metadataId = collectionIdentifier + "/" + process.getTitel() + "_meta.xml";
+        }
+        Resource metaResource = model.createResource(metadataId, model.createResource(model.getNsPrefixURI("acdh") + "Metadata"));
 
         // meta.xml, meta_anchor.xml
         //        hasTitle    1       langString  1   --- See note ---    Should be in the form "RIIIWE3793_meta.xml" or "RIIIWE3793_meta_anchor.xml"
+        metaResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasTitle"), process.getTitel() + "_meta_ancor.xml", "en");
         //        hasIdentifier   1-n     Thing   3   --- See note ---    Use identifier in the form https://id.acdh.oeaw.ac.at/woldan/RIIIWE3793/RIIIWE3793_meta.xml or https://id.acdh.oeaw.ac.at/woldan/RIIIWE3793/RIIIWE3793_meta_anchor.xml
+        metaResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasIdentifier"), model.createResource(metadataId));
         //        hasPid  0-n     anyURI  172 --- See note ---    Use as object the Handle reserved through the GWDG PID-Webservice
+        // TODO: check if anchor has a handle id. Otherwise leave it blank
         //        hasCategory 1-n     Concept 47  --- See note ---    Set to https://vocabs.acdh.oeaw.ac.at/archecategory/dataset
+        metaResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasCategory"),
+                model.createResource("https://vocabs.acdh.oeaw.ac.at/archecategory/dataset"));
         //        hasMetadataCreator  1-n     Agent   80  --- See note ---    Inherit value from the containing Process
+        inheritValue(model, processResource, metaResource, "hasMetadataCreator");
         //        hasOwner    1-n     Agent   110 --- See note ---    Inherit value from the containing Process
+        inheritValue(model, processResource, metaResource, "hasOwner");
         //        hasRightsHolder 1-n     Agent   111 --- See note ---    Inherit value from the containing Process
+        inheritValue(model, processResource, metaResource, "hasRightsHolder");
         //        hasLicensor 1-n     Agent   112 --- See note ---    Inherit value from the containing Process
+        inheritValue(model, processResource, metaResource, "hasLicensor");
         //        hasLicense  1       Concept 113 --- See note ---    Inherit value from the containing Process
-        //        isMetadataFor   0-n     ContainerOrResource 146 --- See note ---    "For ID_meta.xml, set to identifier of relative Collection (= Process), e.g. https://id.acdh.oeaw.ac.at/woldan/RIIIWE3793, and identifier of related Publication, e.g. https://id.acdh.oeaw.ac.at/pub-AC02277063
-        //        For ID_meta_anchor.xml, set to identifier of related overarching Publication"
+        inheritValue(model, processResource, metaResource, "hasLicense");
+        //        isMetadataFor   0-n     ContainerOrResource 146 --- See note ---
+        // "For ID_meta.xml, set to identifier of relative Collection (= Process), e.g. https://id.acdh.oeaw.ac.at/woldan/RIIIWE3793, and identifier of
+        //related Publication, e.g. https://id.acdh.oeaw.ac.at/pub-AC02277063
+        // For ID_meta_anchor.xml, set to identifier of related overarching Publication"
+        String catalogIdDigital = "";
+        for (Metadata md : docstruct.getAllMetadata()) {
+            if ("CatalogIDDigital".equals(md.getType().getName())) {
+                catalogIdDigital = md.getValue();
+            }
+        }
+        String pubId = IDENTIFIER_PREFIX + "/pub-" + catalogIdDigital;
+        metaResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "isMetadataFor"), model.createResource(pubId));
+        if (docstruct.getType().isTopmost()) {
+            metaResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "isMetadataFor"), model.createResource(collectionIdentifier));
+        }
         //        isPartOf    0-n     CollectionOrPlaceOrPublication  151 --- See note ---    Should have as object the containing collection (e.g., https://id.acdh.oeaw.ac.at/woldan/RIIIWE3793)
+        metaResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "isPartOf"), model.createResource(collectionIdentifier));
         //        hasDepositor    1-n     Agent   170 --- See note ---    Inherit value from the containing Process
+        inheritValue(model, processResource, metaResource, "hasDepositor");
         //        hasAvailableDate    1   1   dateTime    171 --- Will be automatically filled in.
-        //        hasPid  0-n     anyURI  172 --- See note ---    Use as object the Handle reserved through the GWDG PID-Webservice
         //        hasCurator  0-n     Agent   178 --- See note ---    Inherit value from the containing Process
-        //        hasHosting  1-n 1   Agent   179 --- Will be automatically filled in.
+        inheritValue(model, processResource, metaResource, "hasCurator");
 
-        // for each file within folder
-        //        hasAvailableDate    1   1   dateTime    171 --- Will be automatically filled in.
-        //        hasCategory 1-n     Concept 47  --- See note ---    "For images: set to https://vocabs.acdh.oeaw.ac.at/archecategory/image
-        //        For XML ALTO: set to https://vocabs.acdh.oeaw.ac.at/archecategory/dataset"
-        //        hasCurator  0-n     Agent   178 --- See note ---    Inherit value from the containing Process
-        //        hasDepositor    1-n     Agent   170 --- See note ---    Inherit value from the containing Process
-        //        hasHosting  1-n 1   Agent   179 --- Will be automatically filled in.
-        //        hasIdentifier   1-n     Thing   3   --- See note ---    Use identifier in the form https://id.acdh.oeaw.ac.at/woldan/RIIIWE3793/RIIIWE3793_master/RIIIWE3793_master_0001.tif (where the last segment of the URI corresponds to the relative filename / title of the Resource).
-        //        hasPid  0-n     anyURI  172 --- See note ---    Use as object the Handle reserved through the GWDG PID-Webservice
-        //        hasLicense  1       Concept 113 --- See note ---    Inherit value from the containing Process
-        //        hasLicensor 1-n     Agent   112 --- See note ---    Inherit value from the containing Process
+        return metaResource;
+    }
+
+    private Resource getFolderResource(Model model, Path folder, String collectionIdentifier, Resource processResource) {
+        String folderName = folder.getFileName().toString();
+        String id = collectionIdentifier + "/" + folderName;
+        Resource resource = model.createResource(id, model.createResource(model.getNsPrefixURI("acdh") + "Collections"));
+
+        // folder level, master, media, ocr
+        //        hasTitle    1       langString  1   --- See note ---    Should be in the form "RIIIWE3793_master" or "RIIIWE3793_media" or "RIIIWE3793_ocr".
+        resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasTitle"), folder.getFileName().toString(), "en");
+        //        hasIdentifier   1-n     Thing   3   --- See note ---    Use identifier in the form https://id.acdh.oeaw.ac.at/woldan/RIIIWE3793/RIIIWE3793_master
+        resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasIdentifier"), model.createResource(id));
         //        hasMetadataCreator  1-n     Agent   80  --- See note ---    Inherit value from the containing Process
+        inheritValue(model, processResource, resource, "hasMetadataCreator");
         //        hasOwner    1-n     Agent   110 --- See note ---    Inherit value from the containing Process
+        inheritValue(model, processResource, resource, "hasOwner");
         //        hasRightsHolder 1-n     Agent   111 --- See note ---    Inherit value from the containing Process
-        //        hasTitle    1       langString  1   --- See note ---    Should be in the form "RIIIWE3793_master_0001.tif" or "RIIIWE3793_media_0001.tif" or "RIIIWE3793_0001.xml" (for XML ALTO files)
-        //        isPartOf    1-n     CollectionOrPlaceOrPublication  151 --- See note ---    Should have as object the containing collection (e.g., https://id.acdh.oeaw.ac.at/woldan/RIIIWE3793/RIIIWE3793_master)
-        //        hasPid  0-n     anyURI  172 --- See note ---    Use as object the Handle reserved through the GWDG PID-Webservice
-
-        // topstruct
-        //        hasTitle    1       langString  1   TitleDocMain + " : " + TitleDocSub1
-        //        hasIdentifier   1-n     Thing   3   --- See note ---    Build identifier according to form https://id.acdh.oeaw.ac.at/pub-AC02277063, where the last segment of the URI includes the AC identifier from "CatalogIDDigital", prefixed with "pub-"
-        //        hasNonLinkedIdentifier  0-n     string  4   CatalogIDDigital    e.g. "AC02277063"
-        //        hasNonLinkedIdentifier  0-n     string  4   shelfmarksource e.g. "R-III: WE 379"
-        //        hasCity 0-n     langString  24  PlaceOfPublication  The object of this property should always be a string.
-        //        hasUrl  0-n     anyURI  30  --- See note ---    Should be the URL of the object in Goobi Viewer, e.g. https://viewer.acdh.oeaw.ac.at/viewer/image/AC02277063
-        //        hasDescription  0-n     langString  40  Note    I see that the values for Note are often separated in different strings. Maybe we need to concatenate them, or at least discuss how to best approach them.
-        //        hasDescription  0-n     langString  40  --- See note ---    """We would like to insert here a note about the uncertainty of the date provided in the ARCHE property """"hasDate"""". Therefore, if the Goobi field """"DateOfOrigin"""" presents square brackets (e.g. [1862]), then add acdh:hasNote """"Date is inferred.""""@en, """"Datum ist abgeleitet.""""@de
-        //        If the Goobi field """"DateOfOrigin"""" presents square brackets and a question mark (e.g. [1862?]), then add acdh:hasNote """"Date is inferred and uncertain.""""@en, """"Datum abgeleitet und unsicher.""""@de
-        //        If possible, it would be nice to have something like a checkbox in the Goobi interface, where one can specifiy if a date is uncertain and/or inferred from external source."""
-        //        hasLanguage 0-n     Concept 41  DocLanguage Values should be mapped to the controlled vocabulary used by ARCHE: https://vocabs.acdh.oeaw.ac.at/iso6393/
-        //        hasExtent   0-1     langString  46  SizeSourcePrint
-        //        hasSeriesInformation    0-1     langString  58  CurrentNo
-        //        hasNote 0-1     langString  59  OnTheContent
-        //        hasAuthor   0-n     Agent   73  Creator Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasAuthor   0-n     Agent   73  Cartographer    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasAuthor   0-n     Agent   73  Artist  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasAuthor   0-n     Agent   73  Author  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasEditor   0-n     Agent   74  Editor  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasContributor  0-n     Agent   75  OtherPerson Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasContributor  0-n     Agent   75  Lithographer    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasContributor  0-n     Agent   75  Engraver    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasContributor  0-n     Agent   75  Contributor Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasContributor  0-n     Agent   75  Printer Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasContributor  0-n     Agent   75  PublisherPerson Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasPublisher    0-n     string  77  PublisherName
-        //        hasIssuedDate   0-1     date    129 PublicationYear
-        //        isSourceOf  0-n     ContainerOrReMe 148 --- See note ---    Add here the ARCHE identifier of the related Process, e.g. https://id.acdh.oeaw.ac.at/woldan/RIIIWE3793
-        //        isPartOf    0-n     CollectionOrPlaceOrPublication  151 --- See note ---    In case the Process includes an anchor publication, set the value to the identifier of the anchor publication, which can be taken from field "CatalogIDDigital" with attribute anchorId="true"
-        //        hasAvailableDate    1   1   dateTime    171 --- Will be automatically filled in.
-        //        hasUpdatedDate  0-1 1   dateTime    187 --- Will be automatically filled in.
-        //        aclRead 0-n 1   string  911 --- Will be automatically filled in.
-        //        aclUpdate   0-n 1   string  912 --- Will be automatically filled in.
-        //        aclWrite    0-n 1   string  913 --- Will be automatically filled in.
-        //        createdBy   0-n 1   string  914 --- Will be automatically filled in.
-        //        hasBinaryUpdatedRole    0-n 1   string  940 --- Will be automatically filled in.
-        //        hasUpdatedRole  0-n 1   string  945 --- Will be automatically filled in.
-
-        // anchor
-        //        hasTitle    1       langString  1   TitleDocMain + " : " + TitleDocSub1
-        //        hasIdentifier   1-n     Thing   3   --- See note ---    Build identifier according to form https://id.acdh.oeaw.ac.at/pub-AC00915891, where the last segment of the URI includes the AC identifier from "CatalogIDDigital", prefixed with "pub-"
-        //        hasNonLinkedIdentifier  0-n     string  4   CatalogIDDigital    e.g. "AC00915891"
-        //        hasNonLinkedIdentifier  0-n     string  4   shelfmarksource e.g. "R-III: WE 379"
-        //        hasCity 0-n     langString  24  PlaceOfPublication  The object of this property should always be a string.
-        //        hasUrl  0-n     anyURI  30  --- See note ---    Should be the URL of the object in Goobi Viewer, e.g. https://viewer.acdh.oeaw.ac.at/viewer/toc/AC00915891
-        //        hasDescription  0-n     langString  40  OnTheContent
-        //        hasDescription  0-n     langString  40  --- See note ---    """We would like to insert here a note about the uncertainty of the date provided in the ARCHE property """"hasDate"""". Therefore, if the Goobi field """"DateOfOrigin"""" presents square brackets (e.g. [1862]), then add acdh:hasNote """"Date is inferred.""""@en, """"Datum ist abgeleitet.""""@de
-        //        If the Goobi field """"DateOfOrigin"""" presents square brackets and a question mark (e.g. [1862?]), then add acdh:hasNote """"Date is inferred and uncertain.""""@en, """"Datum abgeleitet und unsicher.""""@de
-        //        If possible, it would be nice to have something like a checkbox in the Goobi interface, where one can specifiy if a date is uncertain and/or inferred from external source."""
-        //        hasLanguage 0-n     Concept 41  DocLanguage Values should be mapped to the controlled vocabulary used by ARCHE: https://vocabs.acdh.oeaw.ac.at/iso6393/
-        //        hasExtent   0-1     langString  46  SizeSourcePrint
-        //        hasSeriesInformation    0-1     langString  58  CurrentNo
-        //        hasNote 0-1     langString  59  Note
-        //        hasAuthor   0-n     Agent   73  Author  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasAuthor   0-n     Agent   73  Creator Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasAuthor   0-n     Agent   73  Cartographer    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasAuthor   0-n     Agent   73  Artist  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasEditor   0-n     Agent   74  Editor  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasContributor  0-n     Agent   75  Contributor Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasContributor  0-n     Agent   75  OtherPerson Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasContributor  0-n     Agent   75  Lithographer    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasContributor  0-n     Agent   75  Engraver    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasContributor  0-n     Agent   75  Printer Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasContributor  0-n     Agent   75  PublisherPerson Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasPublisher    0-n     string  77  PublisherName
-        //        hasIssuedDate   0-1     date    129 PublicationYear
-        //        hasAvailableDate    1   1   dateTime    171 --- Will be automatically filled in.
-        //        hasUpdatedDate  0-1 1   dateTime    187 --- Will be automatically filled in.
-        //        aclRead 0-n 1   string  911 --- Will be automatically filled in.
-        //        aclUpdate   0-n 1   string  912 --- Will be automatically filled in.
-        //        aclWrite    0-n 1   string  913 --- Will be automatically filled in.
-        //        createdBy   0-n 1   string  914 --- Will be automatically filled in.
-        //        hasBinaryUpdatedRole    0-n 1   string  940 --- Will be automatically filled in.
-        //        hasUpdatedRole  0-n 1   string  945 --- Will be automatically filled in.
-
-        try (OutputStream out = new FileOutputStream("/tmp/process.ttl")) {
-            RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
-        } catch (IOException e) {
-            log.error(e);
+        inheritValue(model, processResource, resource, "hasRightsHolder");
+        //        hasLicensor 1-n     Agent   112 --- See note ---    Inherit value from the containing Process
+        inheritValue(model, processResource, resource, "hasLicensor");
+        //        hasLicense  0-1     Concept 113 --- See note ---    Inherit value from the containing Process
+        inheritValue(model, processResource, resource, "hasLicense");
+        //        isPartOf    0-n     CollectionOrPlaceOrPublication  151 --- See note ---    Should have as object the containing collection (e.g., https://id.acdh.oeaw.ac.at/woldan/RIIIWE3793)
+        resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "isPartOf"), model.createResource(collectionIdentifier));
+        //        hasDepositor    1-n     Agent   170 --- See note ---    Inherit value from the containing Process
+        inheritValue(model, processResource, resource, "hasDepositor");
+        //        hasCurator  0-n     Agent   178 --- See note ---    Inherit value from the containing Process
+        inheritValue(model, processResource, resource, "hasCurator");
+        //        hasDate 0-n     date    130 --- See note ---    Inherit value from the containing Process
+        inheritValue(model, processResource, resource, "hasDate");
+        //        hasOaiSet   0-n     Concept 153 --- See note ---    "Add property to Goobi at the Process level. Values should comply with controlled vocabulary https://vocabs.acdh.oeaw.ac.at/archeoaisets/
+        if (collectionIdentifier.contains("Woldan") && folder.getFileName().toString().endsWith("media")
+                && !folder.getFileName().toString().contains("master")) {
+            //        In the specific case of Woldan, ONLY instances of acdh:Collection containing the ""media"" images (e.g. https://id.acdh.oeaw.ac.at/woldan/RIIIWE3791/RIIIWE3791_media)
+            // will have the value https://vocabs.acdh.oeaw.ac.at/archeoaisets/kulturpool"
+            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasOaiSet"),
+                    model.createResource("https://vocabs.acdh.oeaw.ac.at/archeoaisets/kulturpool"));
+        } else {
+            createAgent(model, processResource, "hasOaiSet", "OAISet");
         }
 
-        boolean successful = true;
-        // your logic goes here
+        return resource;
+    }
 
-        log.info("ArcheExport step plugin executed");
-        if (!successful) {
-            return PluginReturnValue.ERROR;
+    private void inheritValue(Model model, Resource processResource, Resource resource, String localName) {
+        StmtIterator it = processResource.listProperties();
+        while (it.hasNext()) {
+            Statement p = it.next();
+            if (localName.equals(p.getPredicate().getLocalName())) {
+                resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), localName), p.getObject());
+            }
         }
-        return PluginReturnValue.FINISH;
     }
 
     /**
@@ -525,13 +718,13 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
      * @param acdh
      * @param processResource
      * @param propertyName
-     * @param fieldName
+     * @param processPropertyName
      */
 
-    private void createAgent(Model model, Resource processResource, String propertyName, String fieldName) {
+    private void createAgent(Model model, Resource processResource, String propertyName, String processPropertyName) {
         Processproperty p = null;
         for (Processproperty prop : process.getEigenschaften()) {
-            if (fieldName.equalsIgnoreCase(prop.getTitel())) {
+            if (processPropertyName.equalsIgnoreCase(prop.getTitel())) {
                 p = prop;
                 break;
             }
@@ -540,7 +733,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
             processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), propertyName), model.createResource(p.getWert()));
         } else {
             processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), propertyName),
-                    model.createResource(projectConfig.getString("/project/" + fieldName)));
+                    model.createResource(projectConfig.getString("/project/" + processPropertyName)));
         }
     }
 

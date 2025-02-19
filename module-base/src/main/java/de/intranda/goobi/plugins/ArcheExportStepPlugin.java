@@ -55,10 +55,12 @@ import de.sub.goobi.persistence.managers.ProcessManager;
 import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
 import net.xeoh.plugins.base.annotations.PluginImplementation;
+import ugh.dl.Corporate;
 import ugh.dl.DigitalDocument;
 import ugh.dl.DocStruct;
 import ugh.dl.Fileformat;
 import ugh.dl.Metadata;
+import ugh.dl.Person;
 import ugh.exceptions.UGHException;
 
 @PluginImplementation
@@ -129,17 +131,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
     @Override
     public PluginReturnValue run() {
-        String sortTitle = null;
-        String orderNumber = null;
-        String maintitle = null;
-        String subtitle = null;
-        String id = null;
-        String shelfmark = null;
-        String language = null;
-        String license = null;
-        String publicationyear = null;
-        String handle = null;
-        String dateOfOrigin = null;
+
         DocStruct logical = null;
         DocStruct anchor = null;
         Map<Path, List<Path>> files = process.getAllFolderAndFiles();
@@ -187,59 +179,19 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
             return PluginReturnValue.ERROR;
         }
 
+        String language = null;
+        String id = null;
         for (Metadata md : logical.getAllMetadata()) {
-            switch (md.getType().getName()) {
-                case "TitleDocMainShort":
-                    sortTitle = md.getValue();
-                    break;
-                case "CurrentNo":
-                    orderNumber = md.getValue();
-                    break;
-                case "TitleDocMain":
-                    maintitle = md.getValue();
-                    break;
-                case "TitleDocSub1":
-                    subtitle = md.getValue();
-                    break;
-                case "CatalogIDDigital":
-                    id = md.getValue();
-                    break;
-                case "shelfmarksource":
-                    shelfmark = md.getValue();
-                    break;
-                case "DocLanguage":
-                    language = md.getValue();
-                    break;
-                case "AccessLicense":
-                    license = md.getValue();
-                    break;
-                case "PublicationYear":
-                    publicationyear = md.getValue();
-                    break;
-                case "DateOfOrigin":
-                    dateOfOrigin = md.getValue();
-                    break;
-                default:
+            if ("DocLanguage".equals(md.getType().getName())) {
+                language = md.getValue();
+            } else if ("CatalogIDDigital".equals(md.getType().getName())) {
+                id = md.getValue();
             }
         }
 
         String languageCode = "de";
         if ("eng".equals(language)) {
             languageCode = "en";
-        }
-
-        boolean dateIsInferred = false;
-        boolean dateIsUncertain = false;
-        if (dateOfOrigin == null && StringUtils.isNotBlank(publicationyear)) {
-            dateOfOrigin = publicationyear;
-        }
-        if (dateOfOrigin != null) {
-            if (dateOfOrigin.contains("?")) {
-                dateIsUncertain = true;
-            }
-            if (dateOfOrigin.contains("[")) {
-                dateIsInferred = true;
-            }
         }
 
         Model model = ModelFactory.createDefaultModel();
@@ -266,8 +218,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
         model.setNsPrefix("top", topCollectionIdentifier);
 
-        Resource processResource = createCollectionResource(sortTitle, orderNumber, maintitle, subtitle, id, shelfmark, language, license,
-                publicationyear, handle, logical, files, masterFolder, languageCode, dateIsInferred, dateIsUncertain, model, collectionIdentifier);
+        Resource processResource = createCollectionResource(language, logical, files, masterFolder, languageCode, model, collectionIdentifier);
 
         try (OutputStream out = new FileOutputStream("/tmp/process.ttl")) {
             RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
@@ -338,80 +289,31 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         }
 
         // topstruct
-        //        hasTitle    1       langString  1   TitleDocMain + " : " + TitleDocSub1
-        //        hasIdentifier   1-n     Thing   3   --- See note ---    Build identifier according to form https://id.acdh.oeaw.ac.at/pub-AC02277063, where the last segment of the URI includes the AC identifier from "CatalogIDDigital", prefixed with "pub-"
-        //        hasNonLinkedIdentifier  0-n     string  4   CatalogIDDigital    e.g. "AC02277063"
-        //        hasNonLinkedIdentifier  0-n     string  4   shelfmarksource e.g. "R-III: WE 379"
-        //        hasCity 0-n     langString  24  PlaceOfPublication  The object of this property should always be a string.
-        //        hasUrl  0-n     anyURI  30  --- See note ---    Should be the URL of the object in Goobi Viewer, e.g. https://viewer.acdh.oeaw.ac.at/viewer/image/AC02277063
-        //        hasDescription  0-n     langString  40  Note    I see that the values for Note are often separated in different strings. Maybe we need to concatenate them, or at least discuss how to best approach them.
-        //        hasDescription  0-n     langString  40  --- See note ---    """We would like to insert here a note about the uncertainty of the date provided in the ARCHE property """"hasDate"""". Therefore, if the Goobi field """"DateOfOrigin"""" presents square brackets (e.g. [1862]), then add acdh:hasNote """"Date is inferred.""""@en, """"Datum ist abgeleitet.""""@de
-        //        If the Goobi field """"DateOfOrigin"""" presents square brackets and a question mark (e.g. [1862?]), then add acdh:hasNote """"Date is inferred and uncertain.""""@en, """"Datum abgeleitet und unsicher.""""@de
-        //        If possible, it would be nice to have something like a checkbox in the Goobi interface, where one can specifiy if a date is uncertain and/or inferred from external source."""
-        //        hasLanguage 0-n     Concept 41  DocLanguage Values should be mapped to the controlled vocabulary used by ARCHE: https://vocabs.acdh.oeaw.ac.at/iso6393/
-        //        hasExtent   0-1     langString  46  SizeSourcePrint
-        //        hasSeriesInformation    0-1     langString  58  CurrentNo
-        //        hasNote 0-1     langString  59  OnTheContent
-        //        hasAuthor   0-n     Agent   73  Creator Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasAuthor   0-n     Agent   73  Cartographer    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasAuthor   0-n     Agent   73  Artist  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasAuthor   0-n     Agent   73  Author  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasEditor   0-n     Agent   74  Editor  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasContributor  0-n     Agent   75  OtherPerson Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasContributor  0-n     Agent   75  Lithographer    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasContributor  0-n     Agent   75  Engraver    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasContributor  0-n     Agent   75  Contributor Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasContributor  0-n     Agent   75  Printer Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasContributor  0-n     Agent   75  PublisherPerson Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-        //        hasPublisher    0-n     string  77  PublisherName
-        //        hasIssuedDate   0-1     date    129 PublicationYear
-        //        isSourceOf  0-n     ContainerOrReMe 148 --- See note ---    Add here the ARCHE identifier of the related Process, e.g. https://id.acdh.oeaw.ac.at/woldan/RIIIWE3793
-        //        isPartOf    0-n     CollectionOrPlaceOrPublication  151 --- See note ---    In case the Process includes an anchor publication, set the value to the identifier of the anchor publication, which can be taken from field "CatalogIDDigital" with attribute anchorId="true"
-        //        hasAvailableDate    1   1   dateTime    171 --- Will be automatically filled in.
-        //        hasUpdatedDate  0-1 1   dateTime    187 --- Will be automatically filled in.
-        //        aclRead 0-n 1   string  911 --- Will be automatically filled in.
-        //        aclUpdate   0-n 1   string  912 --- Will be automatically filled in.
-        //        aclWrite    0-n 1   string  913 --- Will be automatically filled in.
-        //        createdBy   0-n 1   string  914 --- Will be automatically filled in.
-        //        hasBinaryUpdatedRole    0-n 1   string  940 --- Will be automatically filled in.
-        //        hasUpdatedRole  0-n 1   string  945 --- Will be automatically filled in.
+
+        model = ModelFactory.createDefaultModel();
+        model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
+        model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
+        model.setNsPrefix("top", topCollectionIdentifier);
+
+        Resource publicationResource = createPublicationResource(logical, languageCode, model, collectionIdentifier);
+        try (OutputStream out = new FileOutputStream("/tmp/publication.ttl")) {
+            RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
+        } catch (IOException e) {
+            log.error(e);
+        }
 
         if (anchor != null) {
-            //        hasTitle    1       langString  1   TitleDocMain + " : " + TitleDocSub1
-            //        hasIdentifier   1-n     Thing   3   --- See note ---    Build identifier according to form https://id.acdh.oeaw.ac.at/pub-AC00915891, where the last segment of the URI includes the AC identifier from "CatalogIDDigital", prefixed with "pub-"
-            //        hasNonLinkedIdentifier  0-n     string  4   CatalogIDDigital    e.g. "AC00915891"
-            //        hasNonLinkedIdentifier  0-n     string  4   shelfmarksource e.g. "R-III: WE 379"
-            //        hasCity 0-n     langString  24  PlaceOfPublication  The object of this property should always be a string.
-            //        hasUrl  0-n     anyURI  30  --- See note ---    Should be the URL of the object in Goobi Viewer, e.g. https://viewer.acdh.oeaw.ac.at/viewer/toc/AC00915891
-            //        hasDescription  0-n     langString  40  OnTheContent
-            //        hasDescription  0-n     langString  40  --- See note ---    """We would like to insert here a note about the uncertainty of the date provided in the ARCHE property """"hasDate"""". Therefore, if the Goobi field """"DateOfOrigin"""" presents square brackets (e.g. [1862]), then add acdh:hasNote """"Date is inferred.""""@en, """"Datum ist abgeleitet.""""@de
-            //        If the Goobi field """"DateOfOrigin"""" presents square brackets and a question mark (e.g. [1862?]), then add acdh:hasNote """"Date is inferred and uncertain.""""@en, """"Datum abgeleitet und unsicher.""""@de
-            //        If possible, it would be nice to have something like a checkbox in the Goobi interface, where one can specifiy if a date is uncertain and/or inferred from external source."""
-            //        hasLanguage 0-n     Concept 41  DocLanguage Values should be mapped to the controlled vocabulary used by ARCHE: https://vocabs.acdh.oeaw.ac.at/iso6393/
-            //        hasExtent   0-1     langString  46  SizeSourcePrint
-            //        hasSeriesInformation    0-1     langString  58  CurrentNo
-            //        hasNote 0-1     langString  59  Note
-            //        hasAuthor   0-n     Agent   73  Author  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-            //        hasAuthor   0-n     Agent   73  Creator Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-            //        hasAuthor   0-n     Agent   73  Cartographer    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-            //        hasAuthor   0-n     Agent   73  Artist  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-            //        hasEditor   0-n     Agent   74  Editor  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-            //        hasContributor  0-n     Agent   75  Contributor Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-            //        hasContributor  0-n     Agent   75  OtherPerson Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-            //        hasContributor  0-n     Agent   75  Lithographer    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-            //        hasContributor  0-n     Agent   75  Engraver    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-            //        hasContributor  0-n     Agent   75  Printer Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-            //        hasContributor  0-n     Agent   75  PublisherPerson Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-            //        hasPublisher    0-n     string  77  PublisherName
-            //        hasIssuedDate   0-1     date    129 PublicationYear
-            //        hasAvailableDate    1   1   dateTime    171 --- Will be automatically filled in.
-            //        hasUpdatedDate  0-1 1   dateTime    187 --- Will be automatically filled in.
-            //        aclRead 0-n 1   string  911 --- Will be automatically filled in.
-            //        aclUpdate   0-n 1   string  912 --- Will be automatically filled in.
-            //        aclWrite    0-n 1   string  913 --- Will be automatically filled in.
-            //        createdBy   0-n 1   string  914 --- Will be automatically filled in.
-            //        hasBinaryUpdatedRole    0-n 1   string  940 --- Will be automatically filled in.
-            //        hasUpdatedRole  0-n 1   string  945 --- Will be automatically filled in.
+            model = ModelFactory.createDefaultModel();
+            model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
+            model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
+            model.setNsPrefix("top", topCollectionIdentifier);
+
+            Resource anchorPublicationResource = createPublicationResource(anchor, languageCode, model, collectionIdentifier);
+            try (OutputStream out = new FileOutputStream("/tmp/publication_anchor.ttl")) {
+                RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
+            } catch (IOException e) {
+                log.error(e);
+            }
         }
 
         boolean successful = true;
@@ -422,6 +324,226 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
             return PluginReturnValue.ERROR;
         }
         return PluginReturnValue.FINISH;
+    }
+
+    private Resource createPublicationResource(DocStruct docstruct, String languageCode, Model model, String collectionIdentifier) {
+        Resource resource = model.createResource(collectionIdentifier, model.createResource(model.getNsPrefixURI("acdh") + "Publication"));
+
+        String mainTitle = null;
+        String subTitle = null;
+        for (Metadata md : docstruct.getAllMetadata()) {
+            switch (md.getType().getName()) {
+                case "TitleDocMain": {
+                    mainTitle = md.getValue().replace("<<", "").replace(">>", "");
+                    break;
+                }
+                case "TitleDocSub1":
+                    subTitle = md.getValue();
+                    break;
+                default:
+            }
+        }
+        String altTitle;
+        if (StringUtils.isNotBlank(subTitle)) {
+            altTitle = mainTitle + " : " + subTitle;
+        } else {
+            altTitle = mainTitle;
+        }
+        //        hasTitle    1       langString  1   TitleDocMain + " : " + TitleDocSub1
+        resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasTitle"), altTitle, languageCode);
+
+        for (Metadata md : docstruct.getAllMetadata()) {
+            switch (md.getType().getName()) {
+                case "CatalogIDDigital":
+                    String catalogIdDigital = md.getValue();
+                    //        hasIdentifier   1-n     Thing   3   --- See note ---    Build identifier according to form https://id.acdh.oeaw.ac.at/pub-AC02277063, where the last segment of the URI includes the AC identifier from "CatalogIDDigital", prefixed with "pub-"
+                    String pubId = IDENTIFIER_PREFIX + "/pub-" + catalogIdDigital;
+                    resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "isMetadataFor"), model.createResource(pubId));
+                    //        hasNonLinkedIdentifier  0-n     string  4   CatalogIDDigital    e.g. "AC02277063"
+                    resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNonLinkedIdentifier"), catalogIdDigital);
+                    //        hasUrl  0-n     anyURI  30  --- See note ---    Should be the URL of the object in Goobi Viewer, e.g. https://viewer.acdh.oeaw.ac.at/viewer/image/AC02277063
+                    if (docstruct.getType().isAnchor()) {
+                        resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasUrl"),
+                                "https://viewer.acdh.oeaw.ac.at/viewer/toc/" + catalogIdDigital,
+                                XSDDatatype.XSDanyURI);
+                    } else {
+                        resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasUrl"),
+                                "https://viewer.acdh.oeaw.ac.at/viewer/image/" + catalogIdDigital,
+                                XSDDatatype.XSDanyURI);
+                    }
+                    break;
+                case "shelfmarksource":
+                    //        hasNonLinkedIdentifier  0-n     string  4   shelfmarksource e.g. "R-III: WE 379"
+                    resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNonLinkedIdentifier"), md.getValue());
+                    break;
+                case "PlaceOfPublication":
+                    //        hasCity 0-n     langString  24  PlaceOfPublication  The object of this property should always be a string.
+                    resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasCity"), md.getValue(), languageCode);
+                    break;
+                case "Note":
+                    //        hasDescription  0-n     langString  40  Note    I see that the values for Note are often separated in different strings. Maybe we need to concatenate them, or at least discuss how to best approach them.
+                    resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasDescription"), md.getValue(), languageCode);
+                    break;
+
+                case "PublicationYear":
+                    //        hasIssuedDate   0-1     date    129 PublicationYear
+                    resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasDate"), md.getValue(), XSDDatatype.XSDdate);
+                    break;
+                case "DateOfOrigin":
+                    //        hasDescription  0-n     langString  40  --- See note ---    """We would like to insert here a note about the uncertainty of the date provided in the ARCHE property """"hasDate"""". Therefore, if the Goobi field """"DateOfOrigin"""" presents square brackets (e.g. [1862]), then add acdh:hasNote """"Date is inferred.""""@en, """"Datum ist abgeleitet.""""@de
+                    //        If the Goobi field """"DateOfOrigin"""" presents square brackets and a question mark (e.g. [1862?]), then add acdh:hasNote """"Date is inferred and uncertain.""""@en, """"Datum abgeleitet und unsicher.""""@de
+                    //        If possible, it would be nice to have something like a checkbox in the Goobi interface, where one can specifiy if a date is uncertain and/or inferred from external source."""
+                    createDateNote(model, md.getValue(), resource);
+                    break;
+                case "DocLanguage":
+                    //        hasLanguage 0-n     Concept 41  DocLanguage Values should be mapped to the controlled vocabulary used by ARCHE: https://vocabs.acdh.oeaw.ac.at/iso6393/
+                    resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasLanguage"),
+                            model.createResource("https://vocabs.acdh.oeaw.ac.at/iso6393/" + md.getValue()));
+                    break;
+                case "SizeSourcePrint":
+                    //        hasExtent   0-1     langString  46  SizeSourcePrint
+                    resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasExtent"), md.getValue(), languageCode);
+                    break;
+
+                case "CurrentNo":
+                    //        hasSeriesInformation    0-1     langString  58  CurrentNo
+                    resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasSeriesInformation"), md.getValue(), languageCode);
+                    break;
+                case "OnTheContent":
+                    //        hasNote 0-1     langString  59  OnTheContent
+                    resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNote"), md.getValue(), languageCode);
+                    break;
+                case "PublisherName":
+                    //        hasPublisher    0-n     string  77  PublisherName
+                    resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasPublisher"), md.getValue());
+                    break;
+
+                default:
+                    // ignore other metadata
+            }
+        }
+        //        isPartOf    0-n     CollectionOrPlaceOrPublication  151 --- See note ---    In case the Process includes an anchor publication, set the value to the identifier of the anchor publication, which can be taken from field "CatalogIDDigital" with attribute anchorId="true"
+
+        //        isSourceOf  0-n     ContainerOrReMe 148 --- See note ---    Add here the ARCHE identifier of the related Process, e.g. https://id.acdh.oeaw.ac.at/woldan/RIIIWE3793
+        if (docstruct.getAllPersons() != null) {
+            for (Person p : docstruct.getAllPersons()) {
+                switch (p.getType().getName()) {
+                    case "Cartographer", "Artist", "Author":
+                        //        hasAuthor   0-n     Agent   73  Cartographer    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+                        //        hasAuthor   0-n     Agent   73  Artist  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+                        //        hasAuthor   0-n     Agent   73  Author  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+
+                        Resource person = createPerson(languageCode, model, p);
+                        resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasAuthor"), person);
+
+                        break;
+
+                    case "Editor":
+                        //        hasEditor   0-n     Agent   74  Editor  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+                        resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasEditor"), createPerson(languageCode, model, p));
+                        break;
+                    case "OtherPerson", "Lithographer", "Engraver", "Contributor", "Printer", "PublisherPerson":
+                        //        hasContributor  0-n     Agent   75  OtherPerson Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+                        //        hasContributor  0-n     Agent   75  Lithographer    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+                        //        hasContributor  0-n     Agent   75  Engraver    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+                        //        hasContributor  0-n     Agent   75  Contributor Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+                        //        hasContributor  0-n     Agent   75  Printer Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+                        //        hasContributor  0-n     Agent   75  PublisherPerson Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+                        resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasContributor"),
+                                createPerson(languageCode, model, p));
+                        break;
+                    default:
+                        // ignore other roles
+                }
+            }
+        }
+
+        if (docstruct.getAllCorporates() != null) {
+            for (Corporate c : docstruct.getAllCorporates()) {
+                switch (c.getType().getName()) {
+                    case "CorporateArtist":
+                        //        hasAuthor   0-n     Agent   73  Cartographer    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+                        //        hasAuthor   0-n     Agent   73  Artist  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+                        //        hasAuthor   0-n     Agent   73  Author  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+                        resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasAuthor"),
+                                createOrganisation(languageCode, model, c));
+                        break;
+                    case "CorporateEditor":
+                        //        hasEditor   0-n     Agent   74  Editor  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+                        resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasEditor"),
+                                createOrganisation(languageCode, model, c));
+                        break;
+                    case "CorporateOther", "CorporateEngraver", "CorporateContributor":
+                        //        hasContributor  0-n     Agent   75  OtherPerson Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+                        //        hasContributor  0-n     Agent   75  Lithographer    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+                        //        hasContributor  0-n     Agent   75  Engraver    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+                        //        hasContributor  0-n     Agent   75  Contributor Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+                        //        hasContributor  0-n     Agent   75  Printer Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+                        //        hasContributor  0-n     Agent   75  PublisherPerson Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+                        resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasContributor"),
+                                createOrganisation(languageCode, model, c));
+                        break;
+                    default:
+                        // ignore other roles
+                }
+            }
+        }
+
+        return resource;
+    }
+
+    private Resource createOrganisation(String languageCode, Model model, Corporate c) {
+        Resource person = model.createResource();
+        String name = c.getMainName();
+
+        // hasTitle    1       langString  1   firstName + lastName    We cannot use the displayName because we prefer the direct form in ARCHE (i.e., "Friedrich Würthle" instead of "Würthle, Friedrich"). Therefore, it would be better to just have a concatenation of first and last name.
+        person.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasTitle"), name, languageCode);
+
+        if (StringUtils.isNotBlank(c.getAuthorityValue())) {
+
+            //                        hasIdentifier   1-n     Thing   3   authorityURI + authorityValue
+            if (StringUtils.isNotBlank(c.getAuthorityURI())) {
+                person.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasIdentifier"),
+                        model.createResource(c.getAuthorityURI() + c.getAuthorityValue()));
+            } else {
+                person.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasIdentifier"),
+                        model.createResource(c.getAuthorityValue()));
+            }
+        }
+        return person;
+    }
+
+    private Resource createPerson(String languageCode, Model model, Person p) {
+        Resource person = model.createResource();
+        String lastName = p.getLastname();
+        String firstName = p.getFirstname();
+        String displayName;
+        if (StringUtils.isNotBlank(firstName) && StringUtils.isNotBlank(lastName)) {
+            displayName = firstName + " " + lastName;
+        } else if ((StringUtils.isNotBlank(firstName))) {
+            displayName = firstName;
+        } else {
+            displayName = lastName;
+        }
+
+        // hasTitle    1       langString  1   firstName + lastName    We cannot use the displayName because we prefer the direct form in ARCHE (i.e., "Friedrich Würthle" instead of "Würthle, Friedrich"). Therefore, it would be better to just have a concatenation of first and last name.
+        person.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasTitle"), displayName, languageCode);
+        // hasFirstName    0-n     langString  11  firstName
+        person.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasFirstName"), firstName, languageCode);
+        // hasLastName 0-n     langString  12  lastName
+        person.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasLastName"), lastName, languageCode);
+        if (StringUtils.isNotBlank(p.getAuthorityValue())) {
+
+            //                        hasIdentifier   1-n     Thing   3   authorityURI + authorityValue
+            if (StringUtils.isNotBlank(p.getAuthorityURI())) {
+                person.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasIdentifier"),
+                        model.createResource(p.getAuthorityURI() + p.getAuthorityValue()));
+            } else {
+                person.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasIdentifier"),
+                        model.createResource(p.getAuthorityValue()));
+            }
+        }
+        return person;
     }
 
     private void createFileResource(String id, String topCollectionIdentifier, String collectionIdentifier, Resource processResource,
@@ -477,9 +599,56 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         }
     }
 
-    private Resource createCollectionResource(String sortTitle, String orderNumber, String maintitle, String subtitle, String id, String shelfmark,
-            String language, String license, String publicationyear, String handle, DocStruct logical, Map<Path, List<Path>> files, Path masterFolder,
-            String languageCode, boolean dateIsInferred, boolean dateIsUncertain, Model model, String collectionIdentifier) {
+    private Resource createCollectionResource(String language,
+            DocStruct logical, Map<Path, List<Path>> files, Path masterFolder,
+            String languageCode, Model model, String collectionIdentifier) {
+
+        String sortTitle = null;
+        String orderNumber = null;
+        String maintitle = null;
+        String subtitle = null;
+        String id = null;
+        String shelfmark = null;
+        String license = null;
+        String publicationyear = null;
+        String handle = null;
+        String dateOfOrigin = null;
+        for (Metadata md : logical.getAllMetadata()) {
+            switch (md.getType().getName()) {
+                case "TitleDocMainShort":
+                    sortTitle = md.getValue();
+                    break;
+                case "CurrentNo":
+                    orderNumber = md.getValue();
+                    break;
+                case "TitleDocMain":
+                    maintitle = md.getValue();
+                    break;
+                case "TitleDocSub1":
+                    subtitle = md.getValue();
+                    break;
+                case "CatalogIDDigital":
+                    id = md.getValue();
+                    break;
+                case "shelfmarksource":
+                    shelfmark = md.getValue();
+                    break;
+
+                case "AccessLicense":
+                    license = md.getValue();
+                    break;
+                case "PublicationYear":
+                    publicationyear = md.getValue();
+                    break;
+                case "DateOfOrigin":
+                    dateOfOrigin = md.getValue();
+                    break;
+                default:
+            }
+        }
+        if (dateOfOrigin == null && StringUtils.isNotBlank(publicationyear)) {
+            dateOfOrigin = publicationyear;
+        }
         Resource processResource = model.createResource(collectionIdentifier, model.createResource(model.getNsPrefixURI("acdh") + "Collection"));
 
         if (StringUtils.isBlank(sortTitle)) {
@@ -550,16 +719,8 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
         //        hasNote 0-1     langString  59  --- See note ---    "We would like to insert here a note about the uncertainty of the date provided in the ARCHE property ""hasDate"". Therefore, if the Goobi field ""DateOfOrigin"" presents square brackets (e.g. [1862]), then add acdh:hasNote ""Date is inferred.""@en, ""Datum ist abgeleitet.""@de
         //        If the Goobi field ""DateOfOrigin"" presents square brackets and a question mark (e.g. [1862?]), then add acdh:hasNote ""Date is inferred and uncertain.""@en, ""Datum abgeleitet und unsicher.""@de
-        if (dateIsInferred && dateIsUncertain) {
-            processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNote"), "Date is inferred and uncertain.", "en");
-            processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNote"), "Datum abgeleitet und unsicher.", "de");
-        } else if (dateIsInferred) {
-            processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNote"), "Date is inferred.", "en");
-            processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNote"), "Datum abgeleitet.", "de");
-        } else if (dateIsUncertain) {
-            processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNote"), "Date is uncertain.", "en");
-            processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNote"), "Datum unsicher.", "de");
-        }
+
+        createDateNote(model, dateOfOrigin, processResource);
 
         //        hasContact  0-n     Agent   71  --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the acdh:hasContact property of the whole Project (if this property is added).
         createAgent(model, processResource, "hasContact", "contact");
@@ -600,6 +761,30 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
             processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasPid"), handle, XSDDatatype.XSDanyURI);
         }
         return processResource;
+    }
+
+    private void createDateNote(Model model, String dateOfOrigin, Resource resource) {
+        boolean dateIsInferred = false;
+        boolean dateIsUncertain = false;
+        if (dateOfOrigin != null) {
+            if (dateOfOrigin.contains("?")) {
+                dateIsUncertain = true;
+            }
+            if (dateOfOrigin.contains("[")) {
+                dateIsInferred = true;
+            }
+        }
+
+        if (dateIsInferred && dateIsUncertain) {
+            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNote"), "Date is inferred and uncertain.", "en");
+            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNote"), "Datum abgeleitet und unsicher.", "de");
+        } else if (dateIsInferred) {
+            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNote"), "Date is inferred.", "en");
+            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNote"), "Datum abgeleitet.", "de");
+        } else if (dateIsUncertain) {
+            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNote"), "Date is uncertain.", "en");
+            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNote"), "Datum unsicher.", "de");
+        }
     }
 
     private Resource createMetadata(DocStruct docstruct, Model model, String collectionIdentifier, Resource processResource) {

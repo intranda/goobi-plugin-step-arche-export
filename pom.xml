@@ -3,7 +3,7 @@
   <parent>
     <groupId>io.goobi.workflow</groupId>
     <artifactId>workflow-base</artifactId>
-    <version>24.10-SNAPSHOT</version>
+    <version>25.02</version>
     <relativePath />
   </parent>
   <groupId>io.goobi.workflow.plugin</groupId>
@@ -11,7 +11,6 @@
   <packaging>pom</packaging>
   <modules>
     <module>module-base</module>
-    <module>module-gui</module>
   </modules>
   <repositories>
     <repository>
@@ -26,5 +25,18 @@
       <version>${project.version}</version>
       <classifier>classes</classifier>
     </dependency>
+    
+    <dependency>
+    <groupId>org.apache.jena</groupId>
+    <artifactId>jena-core</artifactId>
+    <version>5.3.0</version>
+</dependency>
+<dependency>
+    <groupId>org.apache.jena</groupId>
+    <artifactId>apache-jena-libs</artifactId>
+    <version>5.3.0</version>
+    <type>pom</type>
+</dependency>
+    
   </dependencies>
 </project>

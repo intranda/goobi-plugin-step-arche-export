@@ -1,21 +1,36 @@
 <config_plugin>
-    <!--
-        order of configuration is:
-          1.) project name and step name matches
-          2.) step name matches and project is *
-          3.) project name matches and step name is *
-          4.) project name and step name are *
-	-->
-    
+    <!-- order of configuration is: 1.) project name and step name matches 2.) step name matches and project is * 3.) project name matches and step name 
+        is * 4.) project name and step name are * -->
+
     <config>
         <!-- which projects to use for (can be more then one, otherwise use *) -->
         <project>*</project>
         <step>*</step>
-        
-        <!-- sample parameter -->
-        <value>test</value>
-        <!-- display button to finish the task directly from within the entered plugin -->
-        <allowTaskFinishButtons>true</allowTaskFinishButtons>
+
+
+        <project>
+            <contact>https://arche.acdh.oeaw.ac.at/api/48505</contact>
+            <contributor>https://arche.acdh.oeaw.ac.at/api/105583</contributor>
+
+            <digitisingAgent>https://arche.acdh.oeaw.ac.at/api/21828</digitisingAgent>
+
+            <metadataCreator>https://arche.acdh.oeaw.ac.at/api/21828</metadataCreator>
+
+            <relatedDiscipline>https://arche.acdh.oeaw.ac.at/api/48506</relatedDiscipline>
+            <description>tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.</description>
+
+            <subject>Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod</subject>
+
+            <owner>https://arche.acdh.oeaw.ac.at/api/48505</owner>
+            <licensor>https://arche.acdh.oeaw.ac.at/api/48505</licensor>
+            <depositor>https://arche.acdh.oeaw.ac.at/api/21828</depositor>
+            <curator>https://arche.acdh.oeaw.ac.at/api/21828</curator>
+            <rightsHolder>https://arche.acdh.oeaw.ac.at/api/21003</rightsHolder>
+
+        </project>
+
+
+
     </config>
 
 </config_plugin>

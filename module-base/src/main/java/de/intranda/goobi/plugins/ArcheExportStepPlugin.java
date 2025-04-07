@@ -3,7 +3,10 @@ package de.intranda.goobi.plugins;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Arrays;
 
 /**
  * This file is part of a plugin for Goobi - a Workflow tool for the support of mass digitization.
@@ -39,8 +42,8 @@ import org.apache.jena.rdf.model.Statement;
 import org.apache.jena.rdf.model.StmtIterator;
 import org.apache.jena.riot.RDFDataMgr;
 import org.apache.jena.riot.RDFFormat;
+import org.goobi.beans.GoobiProperty;
 import org.goobi.beans.Process;
-import org.goobi.beans.Processproperty;
 import org.goobi.beans.Project;
 import org.goobi.beans.Step;
 import org.goobi.production.enums.PluginGuiType;
@@ -50,8 +53,8 @@ import org.goobi.production.enums.StepReturnValue;
 import org.goobi.production.plugin.interfaces.IStepPluginVersion2;
 
 import de.sub.goobi.config.ConfigPlugins;
+import de.sub.goobi.helper.Helper;
 import de.sub.goobi.helper.exceptions.SwapException;
-import de.sub.goobi.persistence.managers.ProcessManager;
 import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
 import net.xeoh.plugins.base.annotations.PluginImplementation;
@@ -85,7 +88,11 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
     private static final String IDENTIFIER_PREFIX = "https://id.acdh.oeaw.ac.at/";
 
-    private SubnodeConfiguration projectConfig;
+    private String exportFolder;
+
+    private List<String> projectFields;
+    private List<String> processFields;
+    private List<String> metadataFields;
 
     @Override
     public void initialize(Step step, String returnPath) {
@@ -93,7 +100,24 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         process = step.getProzess();
         project = process.getProjekt();
         // read parameters from correct block in configuration file
-        projectConfig = ConfigPlugins.getProjectAndStepConfig(title, step);
+        SubnodeConfiguration config = ConfigPlugins.getProjectAndStepConfig(title, step);
+
+        // TODO subfolder for each process?
+        Path exportPath = Paths.get(config.getString("/exportFolder"), process.getTitel());
+        try {
+            Files.createDirectories(exportPath);
+        } catch (IOException e) {
+            log.error(e);
+        }
+
+        exportFolder = exportPath.toString();
+        if (!exportFolder.endsWith("/")) {
+            exportFolder = exportFolder + "/";
+        }
+
+        projectFields = Arrays.asList(config.getStringArray("/requiredProjectProperties/field"));
+        processFields = Arrays.asList(config.getStringArray("/requiredProcessProperties/field"));
+        metadataFields = Arrays.asList(config.getStringArray("/requiredMetadata/field"));
 
         log.info("ArcheExport step plugin initialized");
     }
@@ -132,6 +156,38 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
     @Override
     public PluginReturnValue run() {
 
+        // check if required project data is set
+        for (String propertyName : projectFields) {
+            boolean propertyFound = false;
+            for (GoobiProperty gp : project.getProperties()) {
+                if (propertyName.equalsIgnoreCase(gp.getPropertyName())) {
+                    propertyFound = true;
+                    break;
+                }
+            }
+            if (!propertyFound) {
+                Helper.setFehlerMeldung("Required project property not found: " + propertyName);
+                log.error("Required project property not found: " + propertyName);
+                return PluginReturnValue.ERROR;
+            }
+        }
+
+        // check if required process data is set
+        for (String propertyName : processFields) {
+            boolean propertyFound = false;
+            for (GoobiProperty gp : process.getProperties()) {
+                if (propertyName.equalsIgnoreCase(gp.getPropertyName())) {
+                    propertyFound = true;
+                    break;
+                }
+            }
+            if (!propertyFound) {
+                Helper.setFehlerMeldung("Required process property not found: " + propertyName);
+                log.error("Required process property not found: " + propertyName);
+                return PluginReturnValue.ERROR;
+            }
+        }
+
         DocStruct logical = null;
         DocStruct anchor = null;
         Map<Path, List<Path>> files = process.getAllFolderAndFiles();
@@ -166,16 +222,32 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
             return PluginReturnValue.ERROR;
         }
 
+        // check if required metadata is set
+        for (String propertyName : metadataFields) {
+            boolean propertyFound = false;
+            for (Metadata md : logical.getAllMetadata()) {
+                if (propertyName.equalsIgnoreCase(md.getType().getName())) {
+                    propertyFound = true;
+                    break;
+                }
+            }
+            if (!propertyFound) {
+                Helper.setFehlerMeldung("Required metadata not found: " + propertyName);
+                log.error("Required metadata not found: " + propertyName);
+                return PluginReturnValue.ERROR;
+            }
+        }
+        // TODO check anchor metadata?
+
+        // master folder is missing or empty
         if (masterFolder == null) {
-            // master folder is missing or empty
+            Helper.setFehlerMeldung("Master image folder not found");
+            log.error("Master image folder not found");
             return PluginReturnValue.ERROR;
         }
         if (mediaFolder == null) {
-            // TODO is this required?
-            return PluginReturnValue.ERROR;
-        }
-        if (altoFolder == null) {
-            // TODO is this required?
+            Helper.setFehlerMeldung("Media image folder not found");
+            log.error("Media image folder not found");
             return PluginReturnValue.ERROR;
         }
 
@@ -201,14 +273,6 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
         model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
 
-        Resource topCollection = createTopCollectionDocument(model, topCollectionIdentifier, languageCode);
-        try (
-                OutputStream out = new FileOutputStream("/tmp/project.ttl")) {
-            RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
-        } catch (IOException e) {
-            log.error(e);
-        }
-
         // process level
         String collectionIdentifier = topCollectionIdentifier + "/" + process.getTitel();
 
@@ -220,7 +284,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
         Resource processResource = createCollectionResource(language, logical, files, masterFolder, languageCode, model, collectionIdentifier);
 
-        try (OutputStream out = new FileOutputStream("/tmp/process.ttl")) {
+        try (OutputStream out = new FileOutputStream(exportFolder + process.getTitel() + ".ttl")) {
             RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
         } catch (IOException e) {
             log.error(e);
@@ -230,40 +294,42 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
         model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
         model.setNsPrefix("top", topCollectionIdentifier);
-        Resource masterResource = getFolderResource(model, masterFolder, collectionIdentifier, processResource);
-        try (OutputStream out = new FileOutputStream("/tmp/masterFolder.ttl")) {
-            RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
-        } catch (IOException e) {
-            log.error(e);
-        }
-        model = ModelFactory.createDefaultModel();
-        model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
-        model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
-        model.setNsPrefix("top", topCollectionIdentifier);
-        Resource mediaResource = getFolderResource(model, mediaFolder, collectionIdentifier, processResource);
-        try (OutputStream out = new FileOutputStream("/tmp/mediaFolder.ttl")) {
-            RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
-        } catch (IOException e) {
-            log.error(e);
-        }
-        model = ModelFactory.createDefaultModel();
-        model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
-        model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
-        model.setNsPrefix("top", topCollectionIdentifier);
-        Resource altoResource = getFolderResource(model, altoFolder, collectionIdentifier, processResource);
-        try (OutputStream out = new FileOutputStream("/tmp/altoFolder.ttl")) {
-            RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
-        } catch (IOException e) {
-            log.error(e);
-        }
 
+        createFolderResource(model, masterFolder, collectionIdentifier, processResource);
+        try (OutputStream out = new FileOutputStream(exportFolder + "masterFolder.ttl")) {
+            RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
+        } catch (IOException e) {
+            log.error(e);
+        }
+        model = ModelFactory.createDefaultModel();
+        model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
+        model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
+        model.setNsPrefix("top", topCollectionIdentifier);
+        createFolderResource(model, mediaFolder, collectionIdentifier, processResource);
+        try (OutputStream out = new FileOutputStream(exportFolder + "mediaFolder.ttl")) {
+            RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
+        } catch (IOException e) {
+            log.error(e);
+        }
+        model = ModelFactory.createDefaultModel();
+        model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
+        model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
+        model.setNsPrefix("top", topCollectionIdentifier);
+        if (altoFolder != null) {
+            createFolderResource(model, altoFolder, collectionIdentifier, processResource);
+            try (OutputStream out = new FileOutputStream(exportFolder + "altoFolder.ttl")) {
+                RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
+            } catch (IOException e) {
+                log.error(e);
+            }
+        }
         if (anchor != null) {
             model = ModelFactory.createDefaultModel();
             model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
             model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
             model.setNsPrefix("top", topCollectionIdentifier);
             createMetadata(anchor, model, collectionIdentifier, processResource);
-            try (OutputStream out = new FileOutputStream("/tmp/meta_anchor.ttl")) {
+            try (OutputStream out = new FileOutputStream(exportFolder + "meta_anchor.ttl")) {
                 RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
             } catch (IOException e) {
                 log.error(e);
@@ -274,7 +340,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
         model.setNsPrefix("top", topCollectionIdentifier);
         createMetadata(logical, model, collectionIdentifier, processResource);
-        try (OutputStream out = new FileOutputStream("/tmp/meta.ttl")) {
+        try (OutputStream out = new FileOutputStream(exportFolder + "meta.ttl")) {
             RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
         } catch (IOException e) {
             log.error(e);
@@ -295,25 +361,26 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
         model.setNsPrefix("top", topCollectionIdentifier);
 
-        Resource publicationResource = createPublicationResource(logical, languageCode, model, collectionIdentifier);
-        try (OutputStream out = new FileOutputStream("/tmp/publication.ttl")) {
-            RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
-        } catch (IOException e) {
-            log.error(e);
-        }
-
+        Resource anchorResource = null;
         if (anchor != null) {
             model = ModelFactory.createDefaultModel();
             model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
             model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
             model.setNsPrefix("top", topCollectionIdentifier);
 
-            Resource anchorPublicationResource = createPublicationResource(anchor, languageCode, model, collectionIdentifier);
-            try (OutputStream out = new FileOutputStream("/tmp/publication_anchor.ttl")) {
+            createPublicationResource(anchor, languageCode, model, collectionIdentifier, null);
+            try (OutputStream out = new FileOutputStream(exportFolder + "publication_anchor.ttl")) {
                 RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
             } catch (IOException e) {
                 log.error(e);
             }
+        }
+
+        createPublicationResource(logical, languageCode, model, collectionIdentifier, anchorResource);
+        try (OutputStream out = new FileOutputStream(exportFolder + "publication.ttl")) {
+            RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
+        } catch (IOException e) {
+            log.error(e);
         }
 
         boolean successful = true;
@@ -326,7 +393,8 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         return PluginReturnValue.FINISH;
     }
 
-    private Resource createPublicationResource(DocStruct docstruct, String languageCode, Model model, String collectionIdentifier) {
+    private Resource createPublicationResource(DocStruct docstruct, String languageCode, Model model, String collectionIdentifier,
+            Resource anchorResource) {
         Resource resource = model.createResource(collectionIdentifier, model.createResource(model.getNsPrefixURI("acdh") + "Publication"));
 
         String mainTitle = null;
@@ -422,8 +490,10 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                     // ignore other metadata
             }
         }
-        //        isPartOf    0-n     CollectionOrPlaceOrPublication  151 --- See note ---    In case the Process includes an anchor publication, set the value to the identifier of the anchor publication, which can be taken from field "CatalogIDDigital" with attribute anchorId="true"
-
+        //       isPartOf    0-n     CollectionOrPlaceOrPublication  151 --- See note ---    In case the Process includes an anchor publication, set the value to the identifier of the anchor publication, which can be taken from field "CatalogIDDigital" with attribute anchorId="true"
+        if (anchorResource != null) {
+            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "isPartOf"), anchorResource);
+        }
         //        isSourceOf  0-n     ContainerOrReMe 148 --- See note ---    Add here the ARCHE identifier of the related Process, e.g. https://id.acdh.oeaw.ac.at/woldan/RIIIWE3793
         if (docstruct.getAllPersons() != null) {
             for (Person p : docstruct.getAllPersons()) {
@@ -444,7 +514,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                         break;
                     case "OtherPerson", "Lithographer", "Engraver", "Contributor", "Printer", "PublisherPerson":
                         //        hasContributor  0-n     Agent   75  OtherPerson Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-                        //        hasContributor  0-n     Agent   75  Lithographer    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
+                        //        hasContributor  0-n     Agent   75  Lithographer  curator  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
                         //        hasContributor  0-n     Agent   75  Engraver    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
                         //        hasContributor  0-n     Agent   75  Contributor Object of this property should be the URI of the corresponding Agent (Person or Organisation)
                         //        hasContributor  0-n     Agent   75  Printer Object of this property should be the URI of the corresponding Agent (Person or Organisation)
@@ -462,24 +532,14 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
             for (Corporate c : docstruct.getAllCorporates()) {
                 switch (c.getType().getName()) {
                     case "CorporateArtist":
-                        //        hasAuthor   0-n     Agent   73  Cartographer    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-                        //        hasAuthor   0-n     Agent   73  Artist  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-                        //        hasAuthor   0-n     Agent   73  Author  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
                         resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasAuthor"),
                                 createOrganisation(languageCode, model, c));
                         break;
                     case "CorporateEditor":
-                        //        hasEditor   0-n     Agent   74  Editor  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
                         resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasEditor"),
                                 createOrganisation(languageCode, model, c));
                         break;
                     case "CorporateOther", "CorporateEngraver", "CorporateContributor":
-                        //        hasContributor  0-n     Agent   75  OtherPerson Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-                        //        hasContributor  0-n     Agent   75  Lithographer    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-                        //        hasContributor  0-n     Agent   75  Engraver    Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-                        //        hasContributor  0-n     Agent   75  Contributor Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-                        //        hasContributor  0-n     Agent   75  Printer Object of this property should be the URI of the corresponding Agent (Person or Organisation)
-                        //        hasContributor  0-n     Agent   75  PublisherPerson Object of this property should be the URI of the corresponding Agent (Person or Organisation)
                         resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasContributor"),
                                 createOrganisation(languageCode, model, c));
                         break;
@@ -488,7 +548,6 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                 }
             }
         }
-
         return resource;
     }
 
@@ -576,6 +635,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasIdentifier"), model.createResource(fileId));
         //        hasPid  0-n     anyURI  172 --- See note ---    Use as object the Handle reserved through the GWDG PID-Webservice
         // TODO check for handles on image level, leave it blank if missing
+
         //        hasLicense  1       Concept 113 --- See note ---    Inherit value from the containing Process
         inheritValue(model, processResource, resource, "hasLicense");
         //        hasLicensor 1-n     Agent   112 --- See note ---    Inherit value from the containing Process
@@ -592,7 +652,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "isPartOf"),
                 model.createResource(collectionIdentifier + "/" + folderName));
 
-        try (OutputStream out = new FileOutputStream("/tmp/" + folderName + "_" + filename + ".ttl")) {
+        try (OutputStream out = new FileOutputStream(exportFolder + folderName + "_" + filename + ".ttl")) {
             RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
         } catch (IOException e) {
             log.error(e);
@@ -723,22 +783,22 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         createDateNote(model, dateOfOrigin, processResource);
 
         //        hasContact  0-n     Agent   71  --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the acdh:hasContact property of the whole Project (if this property is added).
-        createAgent(model, processResource, "hasContact", "contact");
+        createPropertyInResource(model, processResource, "hasContact", "contact");
 
         //        hasDigitisingAgent  0-n     Agent   76  --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the acdh:hasDigitisingAgent property of the whole Project (if this property is added).
-        createAgent(model, processResource, "hasDigitisingAgent", "digitisingAgent");
+        createPropertyInResource(model, processResource, "hasDigitisingAgent", "digitisingAgent");
         //        hasMetadataCreator  1-n     Agent   80  --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the acdh:hasMetadataCreator property of the whole Project (if this property is added).
-        createAgent(model, processResource, "hasMetadataCreator", "metadataCreator");
+        createPropertyInResource(model, processResource, "hasMetadataCreator", "metadataCreator");
         //        hasOwner    1-n     Agent   110 --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the acdh:hasOwner property of the whole Project (if this property is added).
-        createAgent(model, processResource, "hasOwner", "owner");
+        createPropertyInResource(model, processResource, "hasOwner", "owner");
         //        hasRightsHolder 1-n     Agent   111 --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the Rights Holder property of the whole Project.
-        createAgent(model, processResource, "hasRightsHolder", "rightsHolder");
+        createPropertyInResource(model, processResource, "hasRightsHolder", "rightsHolder");
         //        hasLicensor 1-n     Agent   112 --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the acdh:hasLicensor property of the whole Project (if this property is added).
-        createAgent(model, processResource, "hasLicensor", "licensor");
+        createPropertyInResource(model, processResource, "hasLicensor", "licensor");
         //        hasDepositor    1-n     Agent   170 --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the acdh:hasDepositor property of the whole Project (if this property is added).
-        createAgent(model, processResource, "hasDepositor", "depositor");
+        createPropertyInResource(model, processResource, "hasDepositor", "depositor");
         //        hasCurator  0-n     Agent   178 --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the acdh:hasCurator property of the whole Project (if this property is added).
-        createAgent(model, processResource, "hasCurator", "curator");
+        createPropertyInResource(model, processResource, "hasCurator", "curator");
 
         //        hasSubject  0-n     langString  94  --- See note ---    Add label of topStruct here, e.g. "Band"@de and "volume"@en for topStruct "Volume". English labels should preferably have small initial letters.
         for (Entry<String, String> l : logical.getType().getAllLanguages().entrySet()) {
@@ -756,10 +816,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         //        relation    0-n     Thing   139 --- See note ---    Should be the URL of the object in the OBV catalog, e.g. https://permalink.obvsg.at/AC02277063 (it can be automatically created from CatalogIDDigital, I suppose)
         processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "relation"),
                 model.createResource("https://permalink.obvsg.at/" + id));
-        //        hasPid  0-n     anyURI  172 --- See note ---    Use as object the Handle reserved through the GWDG PID-Webservice
-        if (handle != null) {
-            processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasPid"), handle, XSDDatatype.XSDanyURI);
-        }
+
         return processResource;
     }
 
@@ -804,7 +861,14 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         //        hasIdentifier   1-n     Thing   3   --- See note ---    Use identifier in the form https://id.acdh.oeaw.ac.at/woldan/RIIIWE3793/RIIIWE3793_meta.xml or https://id.acdh.oeaw.ac.at/woldan/RIIIWE3793/RIIIWE3793_meta_anchor.xml
         metaResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasIdentifier"), model.createResource(metadataId));
         //        hasPid  0-n     anyURI  172 --- See note ---    Use as object the Handle reserved through the GWDG PID-Webservice
-        // TODO: check if anchor has a handle id. Otherwise leave it blank
+        for (Metadata md : docstruct.getAllMetadata()) {
+            if ("Handle".equals(md.getType().getName())) {
+                metaResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasPid"),
+                        md.getValue(),
+                        XSDDatatype.XSDanyURI);
+                break;
+            }
+        }
         //        hasCategory 1-n     Concept 47  --- See note ---    Set to https://vocabs.acdh.oeaw.ac.at/archecategory/dataset
         metaResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasCategory"),
                 model.createResource("https://vocabs.acdh.oeaw.ac.at/archecategory/dataset"));
@@ -844,7 +908,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         return metaResource;
     }
 
-    private Resource getFolderResource(Model model, Path folder, String collectionIdentifier, Resource processResource) {
+    private void createFolderResource(Model model, Path folder, String collectionIdentifier, Resource processResource) {
         String folderName = folder.getFileName().toString();
         String id = collectionIdentifier + "/" + folderName;
         Resource resource = model.createResource(id, model.createResource(model.getNsPrefixURI("acdh") + "Collections"));
@@ -880,10 +944,9 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
             resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasOaiSet"),
                     model.createResource("https://vocabs.acdh.oeaw.ac.at/archeoaisets/kulturpool"));
         } else {
-            createAgent(model, processResource, "hasOaiSet", "OAISet");
+            createPropertyInResource(model, processResource, "hasOaiSet", "OAISet");
         }
 
-        return resource;
     }
 
     private void inheritValue(Model model, Resource processResource, Resource resource, String localName) {
@@ -906,102 +969,27 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
      * @param processPropertyName
      */
 
-    private void createAgent(Model model, Resource processResource, String propertyName, String processPropertyName) {
-        Processproperty p = null;
-        for (Processproperty prop : process.getEigenschaften()) {
-            if (processPropertyName.equalsIgnoreCase(prop.getTitel())) {
+    private void createPropertyInResource(Model model, Resource processResource, String propertyName, String processPropertyName) {
+        GoobiProperty p = null;
+
+        for (GoobiProperty prop : process.getEigenschaften()) {
+            if (processPropertyName.equalsIgnoreCase(prop.getPropertyName())) {
                 p = prop;
                 break;
             }
         }
+        if (p == null) {
+            for (GoobiProperty prop : project.getProperties()) {
+                if (processPropertyName.equalsIgnoreCase(prop.getPropertyName())) {
+                    p = prop;
+                    break;
+                }
+            }
+        }
+
         if (p != null) {
-            processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), propertyName), model.createResource(p.getWert()));
-        } else {
-            processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), propertyName),
-                    model.createResource(projectConfig.getString("/project/" + processPropertyName)));
+            processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), propertyName), model.createResource(p.getPropertyValue()));
         }
     }
 
-    public Resource createTopCollectionDocument(Model model, String topCollectionIdentifier, String languageCode) {
-        Resource projectResource =
-                model.createResource(topCollectionIdentifier, model.createResource(model.getNsPrefixURI("acdh") + "TopCollection"));
-        //        hasTitle -> project name
-        projectResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasTitle"), project.getTitel(), languageCode);
-        //        hasIdentifier -> topCollectionIdentifier
-        projectResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasIdentifier"),
-                model.createResource(topCollectionIdentifier));
-        //        hasPid  -> leave it free
-
-        //        hasUrl -> viewer root url https://viewer.acdh.oeaw.ac.at/viewer
-        projectResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasUrl"), "https://viewer.acdh.oeaw.ac.at/viewer",
-                XSDDatatype.XSDanyURI);
-        //        hasDescription -> project description (property, config, ...)
-        projectResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasDescription"),
-                projectConfig.getString("/project/description"), languageCode);
-        //        hasLifeCycleStatus -> project active: set to https://vocabs.acdh.oeaw.ac.at/archelifecyclestatus/active Otherwise, https://vocabs.acdh.oeaw.ac.at/archelifecyclestatus/completed
-        if (project.getProjectIsArchived().booleanValue()) {
-            projectResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasLifeCycleStatus"),
-                    model.createResource("https://vocabs.acdh.oeaw.ac.at/archelifecyclestatus/active"));
-        } else {
-            projectResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasLifeCycleStatus"),
-                    model.createResource("https://vocabs.acdh.oeaw.ac.at/archelifecyclestatus/completed"));
-        }
-        //        hasUsedSoftware -> Goobi
-        projectResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasUsedSoftware"), "Goobi");
-        //        hasContact -> config
-        projectResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasContact"),
-                model.createResource(projectConfig.getString("/project/contact")));
-        //        hasContributor -> config
-        projectResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasContributor"),
-                model.createResource(projectConfig.getString("/project/contributor")));
-        //        hasDigitisingAgent -> config
-        projectResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasDigitisingAgent"),
-                model.createResource(projectConfig.getString("/project/digitisingAgent")));
-        //        hasMetadataCreator -> config
-        projectResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasMetadataCreator"),
-                model.createResource(projectConfig.getString("/project/metadataCreator")));
-        //        hasRelatedDiscipline -> config, value from https://vocabs.acdh.oeaw.ac.at/oefosdisciplines/
-        projectResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasRelatedDiscipline"),
-                model.createResource("https://vocabs.acdh.oeaw.ac.at/oefosdisciplines/102"));
-        //        hasSubject -> config
-        projectResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasSubject"), projectConfig.getString("/project/subject"),
-                "en");
-
-        String query =
-                "select min(value), max(value) from metadata where name = 'PublicationYear' and processid in (select ProzesseId from prozesse where ProjekteID = (Select projekteid from projekte where titel='"
-                        + project.getTitel() + "')) group by name;";
-        @SuppressWarnings("unchecked")
-        List<Object> results = ProcessManager.runSQL(query);
-        if (!results.isEmpty()) {
-            Object[] row = (Object[]) results.get(0);
-            projectResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasCoverageStartDate"), String.valueOf(row[0]),
-                    XSDDatatype.XSDdate);
-            projectResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasCoverageEndDate"), String.valueOf(row[1]),
-                    XSDDatatype.XSDdate);
-        }
-        //        hasOwner -> config
-        projectResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasOwner"),
-                model.createResource(projectConfig.getString("/project/owner")));
-        //        hasRightsHolder -> Project -> mets rights holder
-        projectResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasRightsHolder"),
-                model.createResource(projectConfig.getString("/project/rightsHolder")));
-        //        hasLicensor -> config
-        projectResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasLicensor"),
-                model.createResource(projectConfig.getString("/project/licensor")));
-        //        hasLicense -> config, use values from https://vocabs.acdh.oeaw.ac.at/archelicenses/
-        projectResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasLicense"),
-                model.createResource("https://vocabs.acdh.oeaw.ac.at/archelicenses/publicdomain-1-0"));
-        //        hasCreatedStartDate -> project start date as YYYY-MM-DD
-        projectResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasCreatedStartDate"), "2020-01-01", XSDDatatype.XSDdate);
-        //        hasCreatedEndDate -> project end date as YYYY-MM-DD
-        projectResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasCreatedEndDate"), "2023-12-31", XSDDatatype.XSDdate);
-        //        hasDepositor -> config
-        projectResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasDepositor"),
-                model.createResource(projectConfig.getString("/project/depositor")));
-        //        hasCurator -> config
-        projectResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasCurator"),
-                model.createResource(projectConfig.getString("/project/curator")));
-
-        return projectResource;
-    }
 }

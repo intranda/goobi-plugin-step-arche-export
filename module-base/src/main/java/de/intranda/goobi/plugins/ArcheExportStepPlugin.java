@@ -6,7 +6,6 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Arrays;
 
 /**
  * This file is part of a plugin for Goobi - a Workflow tool for the support of mass digitization.
@@ -90,10 +89,6 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
     private String exportFolder;
 
-    private List<String> projectFields;
-    private List<String> processFields;
-    private List<String> metadataFields;
-
     @Override
     public void initialize(Step step, String returnPath) {
         this.step = step;
@@ -102,7 +97,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         // read parameters from correct block in configuration file
         SubnodeConfiguration config = ConfigPlugins.getProjectAndStepConfig(title, step);
 
-        // TODO subfolder for each process?
+        // generate subfolder for each process
         Path exportPath = Paths.get(config.getString("/exportFolder"), process.getTitel());
         try {
             Files.createDirectories(exportPath);
@@ -114,10 +109,6 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         if (!exportFolder.endsWith("/")) {
             exportFolder = exportFolder + "/";
         }
-
-        projectFields = Arrays.asList(config.getStringArray("/requiredProjectProperties/field"));
-        processFields = Arrays.asList(config.getStringArray("/requiredProcessProperties/field"));
-        metadataFields = Arrays.asList(config.getStringArray("/requiredMetadata/field"));
 
         log.info("ArcheExport step plugin initialized");
     }
@@ -156,38 +147,6 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
     @Override
     public PluginReturnValue run() {
 
-        // check if required project data is set
-        for (String propertyName : projectFields) {
-            boolean propertyFound = false;
-            for (GoobiProperty gp : project.getProperties()) {
-                if (propertyName.equalsIgnoreCase(gp.getPropertyName())) {
-                    propertyFound = true;
-                    break;
-                }
-            }
-            if (!propertyFound) {
-                Helper.setFehlerMeldung("Required project property not found: " + propertyName);
-                log.error("Required project property not found: " + propertyName);
-                return PluginReturnValue.ERROR;
-            }
-        }
-
-        // check if required process data is set
-        for (String propertyName : processFields) {
-            boolean propertyFound = false;
-            for (GoobiProperty gp : process.getProperties()) {
-                if (propertyName.equalsIgnoreCase(gp.getPropertyName())) {
-                    propertyFound = true;
-                    break;
-                }
-            }
-            if (!propertyFound) {
-                Helper.setFehlerMeldung("Required process property not found: " + propertyName);
-                log.error("Required process property not found: " + propertyName);
-                return PluginReturnValue.ERROR;
-            }
-        }
-
         DocStruct logical = null;
         DocStruct anchor = null;
         Map<Path, List<Path>> files = process.getAllFolderAndFiles();
@@ -221,23 +180,6 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
             // metadata not readable
             return PluginReturnValue.ERROR;
         }
-
-        // check if required metadata is set
-        for (String propertyName : metadataFields) {
-            boolean propertyFound = false;
-            for (Metadata md : logical.getAllMetadata()) {
-                if (propertyName.equalsIgnoreCase(md.getType().getName())) {
-                    propertyFound = true;
-                    break;
-                }
-            }
-            if (!propertyFound) {
-                Helper.setFehlerMeldung("Required metadata not found: " + propertyName);
-                log.error("Required metadata not found: " + propertyName);
-                return PluginReturnValue.ERROR;
-            }
-        }
-        // TODO check anchor metadata?
 
         // master folder is missing or empty
         if (masterFolder == null) {

@@ -601,6 +601,35 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         }
     }
 
+    private void startIngest() {
+        // login: basicAuth or header param EPPN: KEY
+
+        // start transaction: POST /transaction
+
+        // response:
+
+        //         {
+        //            "transactionId": 0,
+        //            "startedAt": "2025-04-23T08:09:58.483Z",
+        //            "lastRequest": "2025-04-23T08:09:58.483Z",
+        //            "state": "active"
+        //          }
+
+        // ttl /metadata -> resourceid
+
+        // header param X-TRANSACTION-ID
+        // body: text/turtle
+
+        // if response is 200: get header param location contains resource URL
+
+        // if response is 409, resource exists, update it ->  PATCH /{resourceId}/metadata
+
+        // file upload/overwrite -> PUT to resource URL
+        // header param CONTENT-TYPE, body
+        // response: ttl with url?
+
+    }
+
     private Resource createCollectionResource(String language,
             DocStruct logical, Map<Path, List<Path>> files, Path masterFolder,
             String languageCode, Model model, String collectionIdentifier) {

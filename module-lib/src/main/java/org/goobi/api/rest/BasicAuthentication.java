@@ -1,4 +1,4 @@
-package io.goobi.api.job.model;
+package org.goobi.api.rest;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;

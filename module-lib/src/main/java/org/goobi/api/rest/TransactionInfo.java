@@ -1,69 +1,51 @@
-package io.goobi.api.job.model;
+package org.goobi.api.rest;
 
-import java.time.OffsetDateTime;
+import lombok.Getter;
+import lombok.Setter;
 
 public class TransactionInfo {
 
     /**
      * Transaction id
      **/
-    private Integer transactionId;
+    private Long transactionId;
 
     /**
      * Transaction start date and time
      **/
-    private OffsetDateTime startedAt;
+    private String startedAt;
 
     /**
      * Transaction last request date and time
      **/
-    private OffsetDateTime lastRequest;
-
-    public enum StateEnum {
-
-        ACTIVE(String.valueOf("active")),
-        COMMIT(String.valueOf("commit")),
-        ROLLBACK(String.valueOf("rollback"));
-
-        String value;
-
-        StateEnum(String v) {
-            value = v;
-        }
-
-        public String value() {
-            return value;
-        }
-
-        @Override
-        public String toString() {
-            return String.valueOf(value);
-        }
-
-    }
+    private String lastRequest;
 
     /**
      * Transaction's current state
      **/
-    private StateEnum state;
+    private String state;
+
+    @Getter
+    @Setter
+    private Integer lockedResourceCount;
 
     /**
      * Transaction id
      *
      * @return transactionId
      **/
-    public Integer getTransactionId() {
+    public Long getTransactionId() {
         return transactionId;
     }
 
     /**
      * Set transactionId
      **/
-    public void setTransactionId(Integer transactionId) {
+    public void setTransactionId(Long transactionId) {
         this.transactionId = transactionId;
     }
 
-    public TransactionInfo transactionId(Integer transactionId) {
+    public TransactionInfo transactionId(Long transactionId) {
         this.transactionId = transactionId;
         return this;
     }
@@ -73,18 +55,18 @@ public class TransactionInfo {
      *
      * @return startedAt
      **/
-    public OffsetDateTime getStartedAt() {
+    public String getStartedAt() {
         return startedAt;
     }
 
     /**
      * Set startedAt
      **/
-    public void setStartedAt(OffsetDateTime startedAt) {
+    public void setStartedAt(String startedAt) {
         this.startedAt = startedAt;
     }
 
-    public TransactionInfo startedAt(OffsetDateTime startedAt) {
+    public TransactionInfo startedAt(String startedAt) {
         this.startedAt = startedAt;
         return this;
     }
@@ -94,18 +76,18 @@ public class TransactionInfo {
      *
      * @return lastRequest
      **/
-    public OffsetDateTime getLastRequest() {
+    public String getLastRequest() {
         return lastRequest;
     }
 
     /**
      * Set lastRequest
      **/
-    public void setLastRequest(OffsetDateTime lastRequest) {
+    public void setLastRequest(String lastRequest) {
         this.lastRequest = lastRequest;
     }
 
-    public TransactionInfo lastRequest(OffsetDateTime lastRequest) {
+    public TransactionInfo lastRequest(String lastRequest) {
         this.lastRequest = lastRequest;
         return this;
     }
@@ -115,18 +97,18 @@ public class TransactionInfo {
      *
      * @return state
      **/
-    public StateEnum getState() {
+    public String getState() {
         return state;
     }
 
     /**
      * Set state
      **/
-    public void setState(StateEnum state) {
+    public void setState(String state) {
         this.state = state;
     }
 
-    public TransactionInfo state(StateEnum state) {
+    public TransactionInfo state(String state) {
         this.state = state;
         return this;
     }

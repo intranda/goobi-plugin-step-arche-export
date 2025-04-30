@@ -6,6 +6,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.time.OffsetDateTime;
 
+import org.goobi.api.rest.TransactionInfo;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -19,10 +20,10 @@ public class TransactionInfoTest {
         transactionInfo = new TransactionInfo();
         now = OffsetDateTime.now();
 
-        transactionInfo.setTransactionId(42);
-        transactionInfo.setStartedAt(now.minusMinutes(10));
-        transactionInfo.setLastRequest(now);
-        transactionInfo.setState(TransactionInfo.StateEnum.ACTIVE);
+        transactionInfo.setTransactionId(42l);
+        transactionInfo.setStartedAt(now.minusMinutes(10).toString());
+        transactionInfo.setLastRequest(now.toString());
+        transactionInfo.setState("active");
     }
 
     @Test
@@ -42,7 +43,7 @@ public class TransactionInfoTest {
 
     @Test
     public void testGetState() {
-        assertEquals(TransactionInfo.StateEnum.ACTIVE, transactionInfo.getState());
+        assertEquals("active", transactionInfo.getState());
     }
 
     @Test
@@ -51,29 +52,15 @@ public class TransactionInfoTest {
         OffsetDateTime last = OffsetDateTime.now();
 
         TransactionInfo info = new TransactionInfo()
-                .transactionId(99)
-                .startedAt(start)
-                .lastRequest(last)
-                .state(TransactionInfo.StateEnum.COMMIT);
+                .transactionId(99l)
+                .startedAt(start.toString())
+                .lastRequest(last.toString())
+                .state("commit");
 
         assertEquals(Integer.valueOf(99), info.getTransactionId());
         assertEquals(start, info.getStartedAt());
         assertEquals(last, info.getLastRequest());
-        assertEquals(TransactionInfo.StateEnum.COMMIT, info.getState());
-    }
-
-    @Test
-    public void testEnumToString() {
-        assertEquals("active", TransactionInfo.StateEnum.ACTIVE.toString());
-        assertEquals("commit", TransactionInfo.StateEnum.COMMIT.toString());
-        assertEquals("rollback", TransactionInfo.StateEnum.ROLLBACK.toString());
-    }
-
-    @Test
-    public void testEnumValue() {
-        assertEquals("active", TransactionInfo.StateEnum.ACTIVE.value());
-        assertEquals("commit", TransactionInfo.StateEnum.COMMIT.value());
-        assertEquals("rollback", TransactionInfo.StateEnum.ROLLBACK.value());
+        assertEquals("commit", info.getState());
     }
 
     @Test

@@ -38,6 +38,8 @@ public class TurtleRestApiTest {
         Resource processResource = model.createResource(collectionIdentifier, model.createResource(model.getNsPrefixURI("acdh") + "Collection"));
         processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasTitle"), "title", "de");
 
+        //        Entity<Model> entity = Entity.entity(processResource.getModel(), "text/turtle");
+        //        return Response.ok().entity(entity).build();
         return Response.ok().entity(processResource.getModel()).build();
 
     }

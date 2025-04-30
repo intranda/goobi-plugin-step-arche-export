@@ -9,8 +9,6 @@ import org.apache.jena.rdf.model.Resource;
 
 import de.sub.goobi.helper.StorageProvider;
 import de.sub.goobi.metadaten.search.EntityLoggingFilter;
-import io.goobi.api.job.model.BasicAuthentication;
-import io.goobi.api.job.model.TransactionInfo;
 import jakarta.ws.rs.client.Client;
 import jakarta.ws.rs.client.ClientBuilder;
 import jakarta.ws.rs.client.Entity;
@@ -35,6 +33,9 @@ public class ArcheAPI {
 
     public static Client getClient(String username, String password) {
         Client client = ClientBuilder.newClient().register(new BasicAuthentication(username, password));
+        client.register(TurtleReader.class);
+        client.register(TurtleWriter.class);
+
         if (enableDebugging) {
             client.register(new EntityLoggingFilter());
         }
@@ -54,23 +55,24 @@ public class ArcheAPI {
         WebTarget target = client.target(baseURI).path("transaction");
         Invocation.Builder builder = target.request();
         builder.header("Accept", "application/json");
-        Response response = builder.post(Entity.json("")); //TODO or null?
+        Response response = builder.post(null); //TODO or null?
         return response.readEntity(TransactionInfo.class);
     }
 
     public static String uploadMetadata(Client client, String baseURI, TransactionInfo ti, Resource resource) {
         WebTarget target = client.target(baseURI).path("metadata");
-        Invocation.Builder builder = target.request();
+        Invocation.Builder builder = target.request("text/turtle");
         builder.header("X-TRANSACTION-ID", ti.getTransactionId());
         builder.accept("text/turtle");
-        Entity<Model> entity = Entity.entity(resource.getModel(), "text/turtle");
+        Model m = resource.getModel();
+        Entity<Model> entity = Entity.entity(m, "text/turtle");
         Response response = builder.post(entity);
         switch (response.getStatus()) {
             case 201:
                 // created, read location
                 // TODO
 
-                Model m = response.readEntity(Model.class);
+                m = response.readEntity(Model.class);
 
                 return response.getHeaderString("location");
             case 409:
@@ -145,7 +147,7 @@ public class ArcheAPI {
         Invocation.Builder builder = target.request();
         builder.header("Accept", "application/json");
         builder.header("X-TRANSACTION-ID", ti.getTransactionId());
-        Response response = builder.put(Entity.json("")); //TODO or null?
+        Response response = builder.put(null);
         if (response.getStatus() != 204) {
             // TODOD handle errors
         }

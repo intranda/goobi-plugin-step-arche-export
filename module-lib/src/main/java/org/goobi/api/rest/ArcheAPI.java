@@ -147,7 +147,7 @@ public class ArcheAPI {
         Invocation.Builder builder = target.request();
         builder.header("Accept", "application/json");
         builder.header("X-TRANSACTION-ID", ti.getTransactionId());
-        Response response = builder.put(null);
+        Response response = builder.put(Entity.json("")); 
         if (response.getStatus() != 204) {
             // TODOD handle errors
         }

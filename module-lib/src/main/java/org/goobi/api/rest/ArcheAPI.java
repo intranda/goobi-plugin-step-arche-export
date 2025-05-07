@@ -6,6 +6,7 @@ import java.nio.file.Path;
 
 import org.apache.jena.rdf.model.Model;
 import org.apache.jena.rdf.model.Resource;
+import org.glassfish.jersey.client.HttpUrlConnectorProvider;
 
 import de.sub.goobi.helper.StorageProvider;
 import de.sub.goobi.metadaten.search.EntityLoggingFilter;
@@ -35,7 +36,6 @@ public class ArcheAPI {
         Client client = ClientBuilder.newClient().register(new BasicAuthentication(username, password));
         client.register(TurtleReader.class);
         client.register(TurtleWriter.class);
-
         if (enableDebugging) {
             client.register(new EntityLoggingFilter());
         }
@@ -87,12 +87,16 @@ public class ArcheAPI {
 
                 target = client.target(baseURI).path(resourceId).path("metadata");
                 builder = target.request();
+                builder.property(HttpUrlConnectorProvider.SET_METHOD_WORKAROUND, true);
                 builder.header("X-TRANSACTION-ID", ti.getTransactionId());
                 response = builder.method("PATCH", entity);
-                // 200 - all good
-                // 4XX - error
 
-                break;
+                m = response.readEntity(Model.class);
+
+                return response.getHeaderString("location");
+            // 204 - all good
+            // 4XX - error
+
             default:
                 // handle error
                 break;
@@ -104,8 +108,18 @@ public class ArcheAPI {
     public static void uploadBinary(Client client, String uri, TransactionInfo ti, Path file) {
         WebTarget target = client.target(uri); // http://example.com/api/{resourceId}
         Invocation.Builder builder = target.request();
+        builder.header("X-TRANSACTION-ID", ti.getTransactionId());
         try (InputStream in = StorageProvider.getInstance().newInputStream(file)) {
-            Entity<InputStream> entity = Entity.entity(in, MediaType.APPLICATION_OCTET_STREAM);
+            Entity<InputStream> entity = null;
+
+            if (file.getFileName().toString().endsWith(".xml")) {
+                entity = Entity.entity(in, MediaType.APPLICATION_XML);
+            } else if (file.getFileName().toString().endsWith(".jpg")) {
+                entity = Entity.entity(in, "image/jpeg");
+            } else if (file.getFileName().toString().endsWith(".tif")) {
+                entity = Entity.entity(in, "image/tiff");
+            }
+
             Response response = builder.put(entity);
             switch (response.getStatus()) {
                 //            204 Binary payload updated

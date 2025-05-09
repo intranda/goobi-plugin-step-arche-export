@@ -79,6 +79,8 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
     private Project project;
 
+    private String projectArcheLocation;
+
     @Getter
     private PluginGuiType pluginGuiType = PluginGuiType.NONE;
 
@@ -146,6 +148,9 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
     @Override
     public PluginReturnValue run() {
+
+        // TODO first check if project was ingested, property with location must exist
+        // abort otherwise
 
         DocStruct logical = null;
         DocStruct anchor = null;

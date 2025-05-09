@@ -121,6 +121,8 @@ public class ArcheAPI {
                 entity = Entity.entity(in, "image/jpeg");
             } else if (file.getFileName().toString().endsWith(".tif")) {
                 entity = Entity.entity(in, "image/tiff");
+            } else {
+                entity = Entity.entity(in, MediaType.APPLICATION_OCTET_STREAM);
             }
 
             Response response = builder.put(entity);

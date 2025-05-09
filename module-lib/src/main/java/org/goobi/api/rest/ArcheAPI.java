@@ -59,6 +59,26 @@ public class ArcheAPI {
         return response.readEntity(TransactionInfo.class);
     }
 
+    public static String updateMetadata(Client client, String location, TransactionInfo ti, Resource resource) {
+
+        WebTarget target = client.target(location);
+        Invocation.Builder builder = target.request();
+        builder.property(HttpUrlConnectorProvider.SET_METHOD_WORKAROUND, true);
+        builder.header("X-TRANSACTION-ID", ti.getTransactionId());
+        builder.accept("text/turtle");
+        Model m = resource.getModel();
+        Entity<Model> entity = Entity.entity(m, "text/turtle");
+        Response response = builder.method("PATCH", entity);
+        switch (response.getStatus()) {
+            case 200, 201, 202, 203, 204:
+                return response.getHeaderString("location");
+            default:
+                // TODO error
+                return null;
+        }
+
+    }
+
     public static String uploadMetadata(Client client, String baseURI, TransactionInfo ti, Resource resource) {
         WebTarget target = client.target(baseURI).path("metadata");
         Invocation.Builder builder = target.request("text/turtle");
@@ -77,25 +97,8 @@ public class ArcheAPI {
                 return response.getHeaderString("location");
             case 409:
                 // Resource with the identifier already exists
-                // use patch instead
-
-                // TODO find resourceId
-                // --> search for document id in arche
-                // --> parse ttl
-                // --> get local name
-                String resourceId = "";
-
-                target = client.target(baseURI).path(resourceId).path("metadata");
-                builder = target.request();
-                builder.property(HttpUrlConnectorProvider.SET_METHOD_WORKAROUND, true);
-                builder.header("X-TRANSACTION-ID", ti.getTransactionId());
-                response = builder.method("PATCH", entity);
-
-                m = response.readEntity(Model.class);
-
-                return response.getHeaderString("location");
-            // 204 - all good
-            // 4XX - error
+                // find record uri, use patch instead
+                break;
 
             default:
                 // handle error

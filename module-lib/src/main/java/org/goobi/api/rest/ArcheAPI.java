@@ -6,6 +6,8 @@ import java.nio.file.Path;
 
 import org.apache.jena.rdf.model.Model;
 import org.apache.jena.rdf.model.Resource;
+import org.apache.jena.rdf.model.Statement;
+import org.apache.jena.rdf.model.StmtIterator;
 import org.glassfish.jersey.client.HttpUrlConnectorProvider;
 
 import de.sub.goobi.helper.StorageProvider;
@@ -170,7 +172,37 @@ public class ArcheAPI {
         if (response.getStatus() != 204) {
             // TODOD handle errors
         }
-
     }
 
+    public static String findResourceURI(Client client, String baseURI, String value, TransactionInfo ti) {
+        WebTarget target = client.target(baseURI)
+                .path("search")
+                .queryParam("value[]", value)
+                .queryParam("property[]", "https%3A%2F%2Fvocabs.acdh.oeaw.ac.at%2Fschema%23hasIdentifier");
+
+        Invocation.Builder builder = target.request();
+        builder.header("Accept", "text/turtle");
+        builder.header("X-TRANSACTION-ID", ti.getTransactionId());
+        Response response = builder.get();
+        switch (response.getStatus()) {
+            case 200:
+                Model m = response.readEntity(Model.class);
+                StmtIterator qIter = m.listStatements();
+                while (qIter.hasNext()) {
+                    Statement stmt = qIter.nextStatement();
+                    Resource subject = stmt.getSubject(); // get the subject
+                    return subject.getURI();
+                }
+
+                break;
+
+            case 404:
+                // resource not found
+                return null;
+            default:
+                // handle errors
+        }
+
+        return "";
+    }
 }

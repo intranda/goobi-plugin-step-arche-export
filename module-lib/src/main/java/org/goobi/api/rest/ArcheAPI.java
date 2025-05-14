@@ -8,6 +8,7 @@ import org.apache.jena.rdf.model.Model;
 import org.apache.jena.rdf.model.Resource;
 import org.apache.jena.rdf.model.Statement;
 import org.apache.jena.rdf.model.StmtIterator;
+import org.apache.jena.util.ResourceUtils;
 import org.glassfish.jersey.client.HttpUrlConnectorProvider;
 
 import de.sub.goobi.helper.StorageProvider;
@@ -61,18 +62,20 @@ public class ArcheAPI {
         return response.readEntity(TransactionInfo.class);
     }
 
-    public static String updateMetadata(Client client, String location, TransactionInfo ti, Resource resource) {
-
-        WebTarget target = client.target(location);
+    public static String updateMetadata(Client client, String location, String baseURI, Resource resource) {
+        TransactionInfo ti = startTransaction(client, baseURI);
+        WebTarget target = client.target(location).path("metadata");
         Invocation.Builder builder = target.request();
         builder.property(HttpUrlConnectorProvider.SET_METHOD_WORKAROUND, true);
         builder.header("X-TRANSACTION-ID", ti.getTransactionId());
         builder.accept("text/turtle");
-        Model m = resource.getModel();
+        // update URI in resource
+        Model m = ResourceUtils.renameResource(resource, location).getModel();
         Entity<Model> entity = Entity.entity(m, "text/turtle");
         Response response = builder.method("PATCH", entity);
         switch (response.getStatus()) {
             case 200, 201, 202, 203, 204:
+                finishTransaction(client, baseURI, ti);
                 return response.getHeaderString("location");
             default:
                 // TODO error
@@ -92,21 +95,19 @@ public class ArcheAPI {
         switch (response.getStatus()) {
             case 201:
                 // created, read location
-                // TODO
-
-                m = response.readEntity(Model.class);
-
                 return response.getHeaderString("location");
             case 409:
                 // Resource with the identifier already exists
-                // find record uri, use patch instead
-                break;
+                // find uri, use patch to update resource
+
+                String uri = findResourceURI(client, baseURI,
+                        resource.getProperty(m.createProperty(m.getNsPrefixURI("acdh"), "hasIdentifier")).getObject().toString());
+                return updateMetadata(client, uri, baseURI, resource);
 
             default:
-                // handle error
+                // TODO handle error
                 break;
         }
-
         return null;
     }
 
@@ -174,7 +175,7 @@ public class ArcheAPI {
         }
     }
 
-    public static String findResourceURI(Client client, String baseURI, String value, TransactionInfo ti) {
+    public static String findResourceURI(Client client, String baseURI, String value) {
         WebTarget target = client.target(baseURI)
                 .path("search")
                 .queryParam("value[]", value)
@@ -182,7 +183,6 @@ public class ArcheAPI {
 
         Invocation.Builder builder = target.request();
         builder.header("Accept", "text/turtle");
-        builder.header("X-TRANSACTION-ID", ti.getTransactionId());
         Response response = builder.get();
         switch (response.getStatus()) {
             case 200:

@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.nio.file.Path;
 
 import org.apache.jena.rdf.model.Model;
+import org.apache.jena.rdf.model.Property;
 import org.apache.jena.rdf.model.Resource;
 import org.apache.jena.rdf.model.Statement;
 import org.apache.jena.rdf.model.StmtIterator;
@@ -62,8 +63,8 @@ public class ArcheAPI {
         return response.readEntity(TransactionInfo.class);
     }
 
-    public static String updateMetadata(Client client, String location, String baseURI, Resource resource) {
-        TransactionInfo ti = startTransaction(client, baseURI);
+    public static String updateMetadata(Client client, String location, String baseURI, Resource resource, TransactionInfo ti) {
+        //        TransactionInfo ti = startTransaction(client, baseURI);
         WebTarget target = client.target(location).path("metadata");
         Invocation.Builder builder = target.request();
         builder.property(HttpUrlConnectorProvider.SET_METHOD_WORKAROUND, true);
@@ -75,8 +76,8 @@ public class ArcheAPI {
         Response response = builder.method("PATCH", entity);
         switch (response.getStatus()) {
             case 200, 201, 202, 203, 204:
-                finishTransaction(client, baseURI, ti);
-                return response.getHeaderString("location");
+                //                finishTransaction(client, baseURI, ti);
+                return location;
             default:
                 // TODO error
                 return null;
@@ -102,7 +103,7 @@ public class ArcheAPI {
 
                 String uri = findResourceURI(client, baseURI,
                         resource.getProperty(m.createProperty(m.getNsPrefixURI("acdh"), "hasIdentifier")).getObject().toString());
-                return updateMetadata(client, uri, baseURI, resource);
+                return updateMetadata(client, uri, baseURI, resource, ti);
 
             default:
                 // TODO handle error
@@ -191,7 +192,10 @@ public class ArcheAPI {
                 while (qIter.hasNext()) {
                     Statement stmt = qIter.nextStatement();
                     Resource subject = stmt.getSubject(); // get the subject
-                    return subject.getURI();
+                    Property predicate = stmt.getPredicate(); // get the predicate
+                    if (predicate.toString().startsWith("https://vocabs.acdh.oeaw.ac.at")) {
+                        return subject.getURI();
+                    }
                 }
 
                 break;

@@ -20,8 +20,6 @@
             <field>curator</field>
         </requiredProjectProperties>
 
-
-
         <requiredProcessProperties>
             <field>OAISet</field>
         </requiredProcessProperties>
@@ -31,6 +29,25 @@
             <field>TitleDocMain</field>
         </requiredMetadata>
 
+        <language>
+            <code iso639-1="de" iso639-2="ger" />
+            <code iso639-1="en" iso639-2="eng" />
+            <code iso639-1="und" iso639-2="und" />
+        </language>
+
+        <licenses>
+            <!-- default license, if nothing is configured -->
+            <license internalName="" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/publicdomain-1-0" />
+            <license internalName="PDM" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/publicdomain-1-0" />
+            <license internalName="CC0" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/cc0-1-0" />
+            <license internalName="CC BY" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/cc-by-4-0" />
+            <license internalName="CC BY-SA" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/cc-by-nc-sa-4-0" />
+            <license internalName="CC BY-ND" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/cc-by-nc-nd-4-0" />
+            <license internalName="CC BY-NC" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/cc-by-nc-4-0" />
+            <license internalName="CC BY-NC-SA" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/cc-by-nc-sa-4-0" />
+            <license internalName="CC BY-NC-ND" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/cc-by-nc-nd-4-0" />
+            <license internalName="reserved" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/inc" />
+        </licenses>
 
     </config>
 

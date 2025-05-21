@@ -707,7 +707,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
         model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
         model.setNsPrefix("top", topCollectionIdentifier);
-        String filename = file.getFileName().toString();
+        String filename = process.getTitel() + "_" + file.getFileName().toString();
         Resource resource =
                 model.createResource(archeConfiguration.getArcheApiUrl(), model.createResource(model.getNsPrefixURI("acdh") + "Resources"));
         //        hasAvailableDate    1   1   dateTime    171 --- Will be automatically filled in.

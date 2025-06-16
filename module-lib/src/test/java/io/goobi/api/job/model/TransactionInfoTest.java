@@ -28,17 +28,17 @@ public class TransactionInfoTest {
 
     @Test
     public void testGetTransactionId() {
-        assertEquals(Integer.valueOf(42), transactionInfo.getTransactionId());
+        assertEquals(Long.valueOf(42), transactionInfo.getTransactionId());
     }
 
     @Test
     public void testGetStartedAt() {
-        assertEquals(now.minusMinutes(10), transactionInfo.getStartedAt());
+        assertEquals(now.minusMinutes(10).toString(), transactionInfo.getStartedAt());
     }
 
     @Test
     public void testGetLastRequest() {
-        assertEquals(now, transactionInfo.getLastRequest());
+        assertEquals(now.toString(), transactionInfo.getLastRequest());
     }
 
     @Test
@@ -57,9 +57,9 @@ public class TransactionInfoTest {
                 .lastRequest(last.toString())
                 .state("commit");
 
-        assertEquals(Integer.valueOf(99), info.getTransactionId());
-        assertEquals(start, info.getStartedAt());
-        assertEquals(last, info.getLastRequest());
+        assertEquals(Long.valueOf(99), info.getTransactionId());
+        assertEquals(start.toString(), info.getStartedAt());
+        assertEquals(last.toString(), info.getLastRequest());
         assertEquals("commit", info.getState());
     }
 

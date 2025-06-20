@@ -385,27 +385,46 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         try (Client client = ArcheAPI.getClient(archeConfiguration.getArcheUserName(), archeConfiguration.getArchePassword())) {
             TransactionInfo ti = ArcheAPI.startTransaction(client, archeConfiguration.getArcheApiUrl());
             // ingest collection resource
-            ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, processResource);
-            // store location uri in property ?
+            String location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, processResource);
+            if (location == null) {
+                // ingest failed, abort
+                return PluginReturnValue.ERROR;
+            }
 
             // ingest publication resources
             for (Resource r : metsResources) {
-                ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, r);
+                location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, r);
+                if (location == null) {
+                    // ingest failed, abort
+                    return PluginReturnValue.ERROR;
+                }
             }
 
             if (anchorMetsResources != null) {
                 for (Resource r : anchorMetsResources) {
-                    ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, r);
+                    location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, r);
+                    if (location == null) {
+                        // ingest failed, abort
+                        return PluginReturnValue.ERROR;
+                    }
                 }
             }
 
             //metadata file resources
             String metaFileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, metaResource);
-            ArcheAPI.uploadBinary(client, metaFileUri, ti, metaFile);
+            boolean success = ArcheAPI.uploadBinary(client, metaFileUri, ti, metaFile);
+            if (!success) {
+                // file upload failed, abort
+                return PluginReturnValue.ERROR;
+            }
 
             if (metaAnchorResource != null) {
                 String metaAnchorUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, metaAnchorResource);
-                ArcheAPI.uploadBinary(client, metaAnchorUri, ti, metaAnchorFile);
+                success = ArcheAPI.uploadBinary(client, metaAnchorUri, ti, metaAnchorFile);
+                if (!success) {
+                    // file upload failed, abort
+                    return PluginReturnValue.ERROR;
+                }
             }
 
             // ingest master folder + files
@@ -416,7 +435,11 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                 Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
                         process.getTitel() + "_master", file);
                 String fileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, fileResource);
-                ArcheAPI.uploadBinary(client, fileUri, ti, file);
+                success = ArcheAPI.uploadBinary(client, fileUri, ti, file);
+                if (!success) {
+                    // file upload failed, abort
+                    return PluginReturnValue.ERROR;
+                }
             }
 
             // ingest media files
@@ -427,18 +450,30 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                 Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
                         process.getTitel() + "_media", file);
                 String fileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, fileResource);
-                ArcheAPI.uploadBinary(client, fileUri, ti, file);
+                success = ArcheAPI.uploadBinary(client, fileUri, ti, file);
+                if (!success) {
+                    // file upload failed, abort
+                    return PluginReturnValue.ERROR;
+                }
             }
 
             if (altoFolder != null) {
-                ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, altoFolderResource);
+                location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, altoFolderResource);
+                if (location == null) {
+                    // ingest failed, abort
+                    return PluginReturnValue.ERROR;
+                }
                 fileList = files.get(altoFolder);
                 for (Path file : fileList) {
                     // create file resource, upload file metadata, upload binary
                     Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
                             process.getTitel() + "_ocr", file);
                     String fileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, fileResource);
-                    ArcheAPI.uploadBinary(client, fileUri, ti, file);
+                    success = ArcheAPI.uploadBinary(client, fileUri, ti, file);
+                    if (!success) {
+                        // file upload failed, abort
+                        return PluginReturnValue.ERROR;
+                    }
                 }
             }
 

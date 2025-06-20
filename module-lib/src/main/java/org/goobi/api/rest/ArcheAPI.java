@@ -12,6 +12,7 @@ import org.apache.jena.rdf.model.StmtIterator;
 import org.apache.jena.util.ResourceUtils;
 import org.glassfish.jersey.client.HttpUrlConnectorProvider;
 
+import de.sub.goobi.helper.Helper;
 import de.sub.goobi.helper.StorageProvider;
 import de.sub.goobi.metadaten.search.EntityLoggingFilter;
 import jakarta.ws.rs.client.Client;
@@ -26,7 +27,7 @@ import lombok.extern.log4j.Log4j2;
 @Log4j2
 public class ArcheAPI {
 
-    private static final boolean enableDebugging = true;
+    private static final boolean enableDebugging = false;
 
     /**
      * Get the client
@@ -59,12 +60,22 @@ public class ArcheAPI {
         WebTarget target = client.target(baseURI).path("transaction");
         Invocation.Builder builder = target.request();
         builder.header("Accept", "application/json");
-        Response response = builder.post(null); //TODO or null?
+        Response response = builder.post(null);
         return response.readEntity(TransactionInfo.class);
     }
 
+    /**
+     * Update existing metadata resource
+     * 
+     * @param client
+     * @param location
+     * @param baseURI
+     * @param resource
+     * @param ti
+     * @return
+     */
+
     public static String updateMetadata(Client client, String location, String baseURI, Resource resource, TransactionInfo ti) {
-        //        TransactionInfo ti = startTransaction(client, baseURI);
         WebTarget target = client.target(location).path("metadata");
         Invocation.Builder builder = target.request();
         builder.property(HttpUrlConnectorProvider.SET_METHOD_WORKAROUND, true);
@@ -76,15 +87,26 @@ public class ArcheAPI {
         Response response = builder.method("PATCH", entity);
         switch (response.getStatus()) {
             case 200, 201, 202, 203, 204:
-                //                finishTransaction(client, baseURI, ti);
                 return location;
             default:
-                // TODO error
+                String result = response.readEntity(String.class);
+                String errorMessage = String.format("ARCHE API call %s failed with error code %2d , reson: %s", location, response.getStatus(),
+                        result);
+                log.error(errorMessage);
+                Helper.setFehlerMeldung(errorMessage);
                 return null;
         }
-
     }
 
+    /**
+     * Upload new metadata resource
+     * 
+     * @param client
+     * @param baseURI
+     * @param ti
+     * @param resource
+     * @return
+     */
     public static String uploadMetadata(Client client, String baseURI, TransactionInfo ti, Resource resource) {
         WebTarget target = client.target(baseURI).path("metadata");
         Invocation.Builder builder = target.request("text/turtle");
@@ -100,19 +122,32 @@ public class ArcheAPI {
             case 409:
                 // Resource with the identifier already exists
                 // find uri, use patch to update resource
-
                 String uri = findResourceURI(client, baseURI,
                         resource.getProperty(m.createProperty(m.getNsPrefixURI("acdh"), "hasIdentifier")).getObject().toString());
                 return updateMetadata(client, uri, baseURI, resource, ti);
 
             default:
-                // TODO handle error
+                String result = response.readEntity(String.class);
+                String errorMessage = String.format("ARCHE API call %s failed with error code %2d , reson: %s", baseURI, response.getStatus(),
+                        result);
+                log.error(errorMessage);
+                Helper.setFehlerMeldung(errorMessage);
                 break;
         }
         return null;
     }
 
-    public static void uploadBinary(Client client, String uri, TransactionInfo ti, Path file) {
+    /**
+     * Upload a binary to an existing metadata resource
+     * 
+     * @param client
+     * @param uri
+     * @param ti
+     * @param file
+     * @return
+     */
+
+    public static boolean uploadBinary(Client client, String uri, TransactionInfo ti, Path file) {
         WebTarget target = client.target(uri); // http://example.com/api/{resourceId}
         Invocation.Builder builder = target.request();
         builder.header("X-TRANSACTION-ID", ti.getTransactionId());
@@ -128,32 +163,38 @@ public class ArcheAPI {
             } else {
                 entity = Entity.entity(in, MediaType.APPLICATION_OCTET_STREAM);
             }
-
+            String errorMessage = null;
             Response response = builder.put(entity);
             switch (response.getStatus()) {
                 //            204 Binary payload updated
-                case 204:
-
-                    break;
+                case 200, 204:
+                    return true;
                 //            401 Unauthorized
                 //            403 Not authorized to update the resource
                 case 401, 403:
-
+                    errorMessage = String.format("Not authorized to update the resource %s", uri);
                     break;
-
                 //            404  Resource doesn't exist
                 //            410 Resource has been deleted (but tombstone exists)
                 case 404, 410:
-
+                    errorMessage = String.format("Resource doesn't exist or has been deleted: %s", uri);
                     break;
                 default:
-                    // handle error
+                    String result = response.readEntity(String.class);
+                    errorMessage = String.format("ARCHE API call %s failed with error code %2d , reson: %s", uri, response.getStatus(),
+                            result);
                     break;
 
             }
+
+            log.error(errorMessage);
+            Helper.setFehlerMeldung(errorMessage);
+
         } catch (IOException e) {
             log.error(e);
         }
+
+        return false;
 
     }
 
@@ -175,6 +216,31 @@ public class ArcheAPI {
             // TODOD handle errors
         }
     }
+
+    /**
+     * Cancel the transaction and rollback the changes
+     * 
+     * @param client
+     * @param baseURI
+     * @param ti
+     */
+
+    public static void cancelTransaction(Client client, String baseURI, TransactionInfo ti) {
+        WebTarget target = client.target(baseURI).path("transaction");
+        Invocation.Builder builder = target.request();
+        builder.header("Accept", "application/json");
+        builder.header("X-TRANSACTION-ID", ti.getTransactionId());
+        builder.delete();
+    }
+
+    /**
+     * Search for a resource by its identifier
+     * 
+     * @param client
+     * @param baseURI
+     * @param value
+     * @return
+     */
 
     public static String findResourceURI(Client client, String baseURI, String value) {
         WebTarget target = client.target(baseURI)

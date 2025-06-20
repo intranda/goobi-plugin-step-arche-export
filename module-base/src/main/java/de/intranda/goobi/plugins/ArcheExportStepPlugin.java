@@ -60,6 +60,7 @@ import org.goobi.production.plugin.interfaces.IStepPluginVersion2;
 import de.sub.goobi.config.ConfigPlugins;
 import de.sub.goobi.helper.Helper;
 import de.sub.goobi.helper.exceptions.SwapException;
+import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.client.Client;
 import lombok.Getter;
 import lombok.extern.log4j.Log4j2;
@@ -442,7 +443,10 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
             }
 
             ArcheAPI.finishTransaction(client, archeConfiguration.getArcheApiUrl(), ti);
+        } catch (ProcessingException e) {
+            Helper.setFehlerMeldung("Cannot reach arche API");
         }
+
         boolean successful = true;
         // your logic goes here
 

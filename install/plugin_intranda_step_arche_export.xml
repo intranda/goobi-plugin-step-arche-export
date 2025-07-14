@@ -7,29 +7,47 @@
         <project>*</project>
         <step>*</step>
 
+        <exportFolder>/tmp</exportFolder>
 
-        <project>
-            <contact>https://arche.acdh.oeaw.ac.at/api/48505</contact>
-            <contributor>https://arche.acdh.oeaw.ac.at/api/105583</contributor>
+        <requiredProjectProperties>
+            <field>contact</field>
+            <field>digitisingAgent</field>
+            <field>metadataCreator</field>
+            <field>owner</field>
+            <field>rightsHolder</field>
+            <field>licensor</field>
+            <field>depositor</field>
+            <field>curator</field>
+        </requiredProjectProperties>
 
-            <digitisingAgent>https://arche.acdh.oeaw.ac.at/api/21828</digitisingAgent>
+        <requiredProcessProperties>
+            <field>OAISet</field>
+        </requiredProcessProperties>
 
-            <metadataCreator>https://arche.acdh.oeaw.ac.at/api/21828</metadataCreator>
+        <requiredMetadata>
+            <field>CatalogIDDigital</field>
+            <field>TitleDocMain</field>
+        </requiredMetadata>
 
-            <relatedDiscipline>https://arche.acdh.oeaw.ac.at/api/48506</relatedDiscipline>
-            <description>tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.</description>
+        <language>
+            <code iso639-1="de" iso639-2="ger" />
+            <code iso639-1="en" iso639-2="eng" />
+            <code iso639-1="und" iso639-2="und" />
+        </language>
 
-            <subject>Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod</subject>
-
-            <owner>https://arche.acdh.oeaw.ac.at/api/48505</owner>
-            <licensor>https://arche.acdh.oeaw.ac.at/api/48505</licensor>
-            <depositor>https://arche.acdh.oeaw.ac.at/api/21828</depositor>
-            <curator>https://arche.acdh.oeaw.ac.at/api/21828</curator>
-            <rightsHolder>https://arche.acdh.oeaw.ac.at/api/21003</rightsHolder>
-
-        </project>
-
-
+        <licenses>
+            <!-- default license, if nothing is configured -->
+            <license internalName="" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/publicdomain-1-0" />
+            <license internalName="PDM" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/publicdomain-1-0" />
+            <license internalName="CC0" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/cc0-1-0" />
+            <license internalName="CC BY" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/cc-by-4-0" />
+            <license internalName="CC BY-SA" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/cc-by-nc-sa-4-0" />
+            <license internalName="CC BY-ND" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/cc-by-nc-nd-4-0" />
+            <license internalName="CC BY-NC" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/cc-by-nc-4-0" />
+            <license internalName="CC BY-NC-SA" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/cc-by-nc-sa-4-0" />
+            <license internalName="CC BY-NC-ND" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/cc-by-nc-nd-4-0" />
+            <license internalName="reserved" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/inc" />
+        </licenses>
 
     </config>
 

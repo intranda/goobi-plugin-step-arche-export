@@ -1,17 +1,18 @@
+<?xml version='1.0' encoding='UTF-8'?>
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>io.goobi.workflow</groupId>
     <artifactId>workflow-base</artifactId>
-    <version>25.06-SNAPSHOT</version>
-    <relativePath />
+    <version>25.06</version>
+    <relativePath/>
   </parent>
   <groupId>io.goobi.workflow.plugin</groupId>
   <artifactId>plugin-step-arche-export</artifactId>
   <packaging>pom</packaging>
   <modules>
     <module>module-base</module>
-    <module>module-lib</module>    
+    <module>module-lib</module>
   </modules>
   <repositories>
     <repository>
@@ -23,21 +24,19 @@
     <dependency>
       <groupId>io.goobi.workflow</groupId>
       <artifactId>workflow-core</artifactId>
-      <version>25.06-SNAPSHOT</version>
+      <version>25.06</version>
       <classifier>classes</classifier>
     </dependency>
-    
     <dependency>
-    <groupId>org.apache.jena</groupId>
-    <artifactId>jena-core</artifactId>
-    <version>5.3.0</version>
-</dependency>
-<dependency>
-    <groupId>org.apache.jena</groupId>
-    <artifactId>apache-jena-libs</artifactId>
-    <version>5.3.0</version>
-    <type>pom</type>
-</dependency>
-    
+      <groupId>org.apache.jena</groupId>
+      <artifactId>jena-core</artifactId>
+      <version>5.3.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.jena</groupId>
+      <artifactId>apache-jena-libs</artifactId>
+      <version>5.3.0</version>
+      <type>pom</type>
+    </dependency>
   </dependencies>
 </project>

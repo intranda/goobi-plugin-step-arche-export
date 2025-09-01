@@ -9,26 +9,6 @@
 
         <exportFolder>/tmp</exportFolder>
 
-        <requiredProjectProperties>
-            <field>contact</field>
-            <field>digitisingAgent</field>
-            <field>metadataCreator</field>
-            <field>owner</field>
-            <field>rightsHolder</field>
-            <field>licensor</field>
-            <field>depositor</field>
-            <field>curator</field>
-        </requiredProjectProperties>
-
-        <requiredProcessProperties>
-            <field>OAISet</field>
-        </requiredProcessProperties>
-
-        <requiredMetadata>
-            <field>CatalogIDDigital</field>
-            <field>TitleDocMain</field>
-        </requiredMetadata>
-
         <language>
             <code iso639-1="de" iso639-2="ger" />
             <code iso639-1="en" iso639-2="eng" />

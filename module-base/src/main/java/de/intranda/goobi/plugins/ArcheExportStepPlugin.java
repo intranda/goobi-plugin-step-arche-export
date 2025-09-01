@@ -480,13 +480,6 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
             ArcheAPI.finishTransaction(client, archeConfiguration.getArcheApiUrl(), ti);
         } catch (ProcessingException e) {
             Helper.setFehlerMeldung("Cannot reach arche API");
-        }
-
-        boolean successful = true;
-        // your logic goes here
-
-        log.info("ArcheExport step plugin executed");
-        if (!successful) {
             return PluginReturnValue.ERROR;
         }
         return PluginReturnValue.FINISH;

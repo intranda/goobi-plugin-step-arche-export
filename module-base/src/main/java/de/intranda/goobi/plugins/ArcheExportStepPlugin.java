@@ -840,7 +840,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         model.setNsPrefix("top", topCollectionIdentifier);
         String filename = process.getTitel() + "_" + file.getFileName().toString();
         Resource resource =
-                model.createResource(archeConfiguration.getArcheApiUrl(), model.createResource(model.getNsPrefixURI("acdh") + "Resources"));
+                model.createResource(archeConfiguration.getArcheApiUrl(), model.createResource(model.getNsPrefixURI("acdh") + "Resource"));
         //        hasAvailableDate    1   1   dateTime    171 --- Will be automatically filled in.
         //        hasCategory 1-n     Concept 47  --- See note ---    "For images: set to https://vocabs.acdh.oeaw.ac.at/archecategory/image
         //        For XML ALTO: set to https://vocabs.acdh.oeaw.ac.at/archecategory/dataset"
@@ -1145,7 +1145,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
     private Resource createFolderResource(Model model, String folderName, String collectionIdentifier, Resource processResource) {
         String id = collectionIdentifier + "/" + folderName;
         Resource resource =
-                model.createResource(archeConfiguration.getArcheApiUrl(), model.createResource(model.getNsPrefixURI("acdh") + "Collections"));
+                model.createResource(archeConfiguration.getArcheApiUrl(), model.createResource(model.getNsPrefixURI("acdh") + "Collection"));
 
         // folder level, master, media, ocr
         //        hasTitle    1       langString  1   --- See note ---    Should be in the form "RIIIWE3793_master" or "RIIIWE3793_media" or "RIIIWE3793_ocr".

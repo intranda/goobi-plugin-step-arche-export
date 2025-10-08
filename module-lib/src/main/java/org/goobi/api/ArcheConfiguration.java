@@ -21,6 +21,8 @@ public class ArcheConfiguration {
     private String identifierPrefix = "https://id.acdh.oeaw.ac.at/";
     private String archeNamespace = "https://vocabs.acdh.oeaw.ac.at/schema#";
 
+    private boolean enableArcheIngest = false;
+
     private XMLConfiguration config;
 
     public ArcheConfiguration(String configurationFile) {
@@ -30,6 +32,9 @@ public class ArcheConfiguration {
         archeUserName = config.getString("/api/archeUserName");
         archePassword = config.getString("/api/archePassword");
         archeApiUrl = config.getString("/api/archeApiUrl");
+
+        enableArcheIngest = config.getBoolean("/api/@enabled", false);
+
         archeUrlPropertyName = config.getString("/project/archeUrlPropertyName");
         placeholderImage = config.getString("/project/placeholderImage");
 

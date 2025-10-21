@@ -3,6 +3,10 @@ title: Data delivery to ARCHE
 identifier: intranda_step_arche_export
 description: Step plugin for data import into ARCHE
 published: true
+keywords:
+    - Goobi workflow
+    - Plugin
+    - Step Plugin
 ---
 
 ## Introduction

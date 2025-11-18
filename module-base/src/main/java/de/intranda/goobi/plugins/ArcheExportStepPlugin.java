@@ -187,7 +187,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         // first check if project was ingested and has a URI
         // TODO
         if (archeConfiguration.isEnableArcheIngest(isProdIngest)) {
-            String projectArcheUrlPropertyName = archeConfiguration.getArcheUrlPropertyName();
+            String projectArcheUrlPropertyName = archeConfiguration.getArcheUrlPropertyName(isProdIngest);
             String projectUri = null;
 
             for (GoobiProperty gp : project.getProperties()) {

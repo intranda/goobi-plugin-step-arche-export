@@ -17,7 +17,8 @@ public class ArcheConfiguration {
     private String archePasswordTest;
     private String archeApiUrlTest;
 
-    private String archeUrlPropertyName;
+    private String archeUrlPropertyNameProd;
+    private String archeUrlPropertyNameTest;
     private String placeholderImage;
 
     private String viewerUrl;
@@ -45,7 +46,9 @@ public class ArcheConfiguration {
         archeApiUrlTest = config.getString("/api[@type!='prod']/archeApiUrl");
         enableArcheIngestTest = config.getBoolean("/api[@type!='prod']/@enabled", false);
 
-        archeUrlPropertyName = config.getString("/project/archeUrlPropertyName");
+        archeUrlPropertyNameProd = config.getString("/project/archeUrlPropertyName[@type='prod']");
+
+        archeUrlPropertyNameTest = config.getString("/project/archeUrlPropertyName[@type!='prod']");
         placeholderImage = config.getString("/project/placeholderImage");
 
         viewerUrl = config.getString("/viewerUrl");
@@ -68,4 +71,9 @@ public class ArcheConfiguration {
     public String getArchePassword(boolean prod) {
         return prod ? archePasswordProd : archePasswordTest;
     }
+
+    public String getArcheUrlPropertyName(boolean prod) {
+        return prod ? archeUrlPropertyNameProd : archeUrlPropertyNameTest;
+    }
+
 }

@@ -105,7 +105,6 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
     private Map<String, String> licenseMapping;
 
-    // TODO get from step config
     private boolean isProdIngest = false;
 
     @Override
@@ -118,6 +117,11 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
         // read parameters from correct block in configuration file
         SubnodeConfiguration config = ConfigPlugins.getProjectAndStepConfig(title, step);
+        String ingestType = config.getString("/ingestType", "prod");
+
+        if ("prod".equalsIgnoreCase(ingestType)) {
+            isProdIngest = true;
+        }
 
         languageCodes = new HashMap<>();
         for (HierarchicalConfiguration hc : config.configurationsAt("/language/code")) {
@@ -185,7 +189,6 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
     public PluginReturnValue run() {
 
         // first check if project was ingested and has a URI
-        // TODO
         if (archeConfiguration.isEnableArcheIngest(isProdIngest)) {
             String projectArcheUrlPropertyName = archeConfiguration.getArcheUrlPropertyName(isProdIngest);
             String projectUri = null;
@@ -1014,7 +1017,6 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
         //        hasNote 0-1     langString  59  --- See note ---    "We would like to insert here a note about the uncertainty of the date provided in the ARCHE property ""hasDate"". Therefore, if the Goobi field ""DateOfOrigin"" presents square brackets (e.g. [1862]), then add acdh:hasNote ""Date is inferred.""@en, ""Datum ist abgeleitet.""@de
         //        If the Goobi field ""DateOfOrigin"" presents square brackets and a question mark (e.g. [1862?]), then add acdh:hasNote ""Date is inferred and uncertain.""@en, ""Datum abgeleitet und unsicher.""@de
-
         createDateNote(model, dateOfOrigin, processResource);
 
         //        hasContact  0-n     Agent   71  --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the acdh:hasContact property of the whole Project (if this property is added).
@@ -1022,16 +1024,22 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
         //        hasDigitisingAgent  0-n     Agent   76  --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the acdh:hasDigitisingAgent property of the whole Project (if this property is added).
         createPropertyInResource(model, processResource, "hasDigitisingAgent", "digitisingAgent");
+
         //        hasMetadataCreator  1-n     Agent   80  --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the acdh:hasMetadataCreator property of the whole Project (if this property is added).
         createPropertyInResource(model, processResource, "hasMetadataCreator", "metadataCreator");
+
         //        hasOwner    1-n     Agent   110 --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the acdh:hasOwner property of the whole Project (if this property is added).
         createPropertyInResource(model, processResource, "hasOwner", "owner");
+
         //        hasRightsHolder 1-n     Agent   111 --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the Rights Holder property of the whole Project.
         createPropertyInResource(model, processResource, "hasRightsHolder", "rightsHolder");
+
         //        hasLicensor 1-n     Agent   112 --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the acdh:hasLicensor property of the whole Project (if this property is added).
         createPropertyInResource(model, processResource, "hasLicensor", "licensor");
+
         //        hasDepositor    1-n     Agent   170 --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the acdh:hasDepositor property of the whole Project (if this property is added).
         createPropertyInResource(model, processResource, "hasDepositor", "depositor");
+
         //        hasCurator  0-n     Agent   178 --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the acdh:hasCurator property of the whole Project (if this property is added).
         createPropertyInResource(model, processResource, "hasCurator", "curator");
 
@@ -1046,10 +1054,11 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
         //        hasDate 0-n     date    130 PublicationYgetArcheApiUrl(isProdIngest)ear
         processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasDate"), publicationyear, XSDDatatype.XSDdate);
+
         //        relation    0-n     Thing   139 --- See note ---    Should be the URL of the object in the OBV catalog, e.g. https://permalink.obvsg.at/AC02277063 (it can be automatically created from CatalogIDDigital, I suppose)
-        //   TODO: temporary removed, as it creates an empty resource
-        //        processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "relation"),
-        //                model.createResource("https://permalink.obvsg.at/" + id));
+        processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "relation"),
+                model.createLiteral("https://permalink.obvsg.at/" + id));
+
         processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasUrl"),
                 "https://permalink.obvsg.at/" + id, XSDDatatype.XSDanyURI);
 

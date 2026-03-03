@@ -105,8 +105,6 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
     private Map<String, String> licenseMapping;
 
-    private boolean isProdIngest = false;
-
     @Override
     public void initialize(Step step, String returnPath) {
         this.step = step;
@@ -118,10 +116,6 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         // read parameters from correct block in configuration file
         SubnodeConfiguration config = ConfigPlugins.getProjectAndStepConfig(title, step);
         String ingestType = config.getString("/ingestType", "prod");
-
-        if ("prod".equalsIgnoreCase(ingestType)) {
-            isProdIngest = true;
-        }
 
         languageCodes = new HashMap<>();
         for (HierarchicalConfiguration hc : config.configurationsAt("/language/code")) {
@@ -189,8 +183,8 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
     public PluginReturnValue run() {
 
         // first check if project was ingested and has a URI
-        if (archeConfiguration.isEnableArcheIngest(isProdIngest)) {
-            String projectArcheUrlPropertyName = archeConfiguration.getArcheUrlPropertyName(isProdIngest);
+        if (archeConfiguration.isEnableArcheIngest()) {
+            String projectArcheUrlPropertyName = archeConfiguration.getArcheUrlPropertyName();
             String projectUri = null;
 
             for (GoobiProperty gp : project.getProperties()) {
@@ -417,12 +411,12 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
             log.error(e);
         }
 
-        if (archeConfiguration.isEnableArcheIngest(isProdIngest)) {
+        if (archeConfiguration.isEnableArcheIngest()) {
             try (Client client =
-                    ArcheAPI.getClient(archeConfiguration.getArcheUserName(isProdIngest), archeConfiguration.getArchePassword(isProdIngest))) {
-                TransactionInfo ti = ArcheAPI.startTransaction(client, archeConfiguration.getArcheApiUrl(isProdIngest));
+                    ArcheAPI.getClient(archeConfiguration.getArcheUserName(), archeConfiguration.getArchePassword())) {
+                TransactionInfo ti = ArcheAPI.startTransaction(client, archeConfiguration.getArcheApiUrl());
                 // ingest collection resource
-                String location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(isProdIngest), ti, processResource);
+                String location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, processResource);
                 if (location == null) {
                     // ingest failed, abort
                     return PluginReturnValue.ERROR;
@@ -430,7 +424,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
                 // ingest publication resources
                 for (Resource r : metsResources) {
-                    location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(isProdIngest), ti, r);
+                    location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, r);
                     if (location == null) {
                         // ingest failed, abort
                         return PluginReturnValue.ERROR;
@@ -439,7 +433,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
                 if (anchorMetsResources != null) {
                     for (Resource r : anchorMetsResources) {
-                        location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(isProdIngest), ti, r);
+                        location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, r);
                         if (location == null) {
                             // ingest failed, abort
                             return PluginReturnValue.ERROR;
@@ -448,7 +442,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                 }
 
                 //metadata file resources
-                String metaFileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(isProdIngest), ti, metaResource);
+                String metaFileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, metaResource);
                 boolean success = ArcheAPI.uploadBinary(client, metaFileUri, ti, metaFile);
                 if (!success) {
                     // file upload failed, abort
@@ -456,7 +450,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                 }
 
                 if (metaAnchorResource != null) {
-                    String metaAnchorUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(isProdIngest), ti, metaAnchorResource);
+                    String metaAnchorUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, metaAnchorResource);
                     success = ArcheAPI.uploadBinary(client, metaAnchorUri, ti, metaAnchorFile);
                     if (!success) {
                         // file upload failed, abort
@@ -465,7 +459,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                 }
 
                 // ingest master folder + files
-                ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(isProdIngest), ti, masterFolderResource);
+                ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, masterFolderResource);
                 List<Path> fileList = files.get(masterFolder);
                 for (Path file : fileList) {
                     // create file resource, upload file metadata, upload binary
@@ -479,7 +473,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                         }
                     }
 
-                    String fileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(isProdIngest), ti, fileResource);
+                    String fileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, fileResource);
                     success = ArcheAPI.uploadBinary(client, fileUri, ti, file);
                     if (!success) {
                         // file upload failed, abort
@@ -488,7 +482,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                 }
 
                 // ingest media files
-                ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(isProdIngest), ti, mediaFolderResource);
+                ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, mediaFolderResource);
                 fileList = files.get(mediaFolder);
                 for (Path file : fileList) {
                     // create file resource, upload file metadata, upload binary
@@ -502,7 +496,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                             log.error(e);
                         }
                     }
-                    String fileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(isProdIngest), ti, fileResource);
+                    String fileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, fileResource);
                     success = ArcheAPI.uploadBinary(client, fileUri, ti, file);
                     if (!success) {
                         // file upload failed, abort
@@ -511,7 +505,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                 }
 
                 if (altoFolder != null) {
-                    location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(isProdIngest), ti, altoFolderResource);
+                    location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, altoFolderResource);
                     if (location == null) {
                         // ingest failed, abort
                         return PluginReturnValue.ERROR;
@@ -528,7 +522,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                                 log.error(e);
                             }
                         }
-                        String fileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(isProdIngest), ti, fileResource);
+                        String fileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, fileResource);
                         success = ArcheAPI.uploadBinary(client, fileUri, ti, file);
                         if (!success) {
                             // file upload failed, abort
@@ -537,7 +531,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                     }
                 }
 
-                ArcheAPI.finishTransaction(client, archeConfiguration.getArcheApiUrl(isProdIngest), ti);
+                ArcheAPI.finishTransaction(client, archeConfiguration.getArcheApiUrl(), ti);
             } catch (ProcessingException e) {
                 Helper.setFehlerMeldung("Cannot reach arche API");
                 return PluginReturnValue.ERROR;
@@ -595,7 +589,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
     private List<Resource> createPublicationResource(DocStruct docstruct, String languageCode, Model model, String collectionIdentifier,
             String anchorResourceId) {
         Resource resource =
-                model.createResource(archeConfiguration.getArcheApiUrl(isProdIngest),
+                model.createResource(archeConfiguration.getArcheApiUrl(),
                         model.createResource(model.getNsPrefixURI("acdh") + "Publication"));
 
         List<Resource> resources = new ArrayList<>();
@@ -782,7 +776,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
         model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
         Resource person =
-                model.createResource(archeConfiguration.getArcheApiUrl(isProdIngest), model.createResource(model.getNsPrefixURI("acdh") + "Person"));
+                model.createResource(archeConfiguration.getArcheApiUrl(), model.createResource(model.getNsPrefixURI("acdh") + "Person"));
         String name = c.getMainName();
 
         // hasTitle    1       langString  1   firstName + lastName    We cannot use the displayName because we prefer the direct form in ARCHE (i.e., "Friedrich Würthle" instead of "Würthle, Friedrich"). Therefore, it would be better to just have a concatenation of first and last name.
@@ -815,7 +809,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
         model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
         Resource person =
-                model.createResource(archeConfiguration.getArcheApiUrl(isProdIngest), model.createResource(model.getNsPrefixURI("acdh") + "Person"));
+                model.createResource(archeConfiguration.getArcheApiUrl(), model.createResource(model.getNsPrefixURI("acdh") + "Person"));
         String lastName = p.getLastname();
         String firstName = p.getFirstname();
         String displayName;
@@ -851,7 +845,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         model.setNsPrefix("top", topCollectionIdentifier);
         String filename = process.getTitel() + "_" + file.getFileName().toString();
         Resource resource =
-                model.createResource(archeConfiguration.getArcheApiUrl(isProdIngest),
+                model.createResource(archeConfiguration.getArcheApiUrl(),
                         model.createResource(model.getNsPrefixURI("acdh") + "Resource"));
         //        hasAvailableDate    1   1   dateTime    171 --- Will be automatically filled in.
         //        hasCategory 1-n     Concept 47  --- See note ---    "For images: set to https://vocabs.acdh.oeaw.ac.at/archecategory/image
@@ -942,7 +936,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
             dateOfOrigin = publicationyear;
         }
         Resource processResource =
-                model.createResource(archeConfiguration.getArcheApiUrl(isProdIngest),
+                model.createResource(archeConfiguration.getArcheApiUrl(),
                         model.createResource(model.getNsPrefixURI("acdh") + "Collection"));
 
         if (StringUtils.isBlank(sortTitle)) {
@@ -1104,7 +1098,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
             title = process.getTitel() + "_meta.xml";
         }
         Resource metaResource =
-                model.createResource(archeConfiguration.getArcheApiUrl(isProdIngest),
+                model.createResource(archeConfiguration.getArcheApiUrl(),
                         model.createResource(model.getNsPrefixURI("acdh") + "Metadata"));
 
         // meta.xml, meta_anchor.xml
@@ -1165,7 +1159,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
     private Resource createFolderResource(Model model, String folderName, String collectionIdentifier, Resource processResource) {
         String id = collectionIdentifier + "/" + folderName;
         Resource resource =
-                model.createResource(archeConfiguration.getArcheApiUrl(isProdIngest),
+                model.createResource(archeConfiguration.getArcheApiUrl(),
                         model.createResource(model.getNsPrefixURI("acdh") + "Collection"));
 
         // folder level, master, media, ocr

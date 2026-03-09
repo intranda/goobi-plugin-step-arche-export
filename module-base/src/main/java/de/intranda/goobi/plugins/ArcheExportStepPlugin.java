@@ -50,7 +50,6 @@ import org.goobi.beans.GoobiProperty;
 import org.goobi.beans.Process;
 import org.goobi.beans.Project;
 import org.goobi.beans.Step;
-import org.goobi.production.enums.LogType;
 import org.goobi.production.enums.PluginGuiType;
 import org.goobi.production.enums.PluginReturnValue;
 import org.goobi.production.enums.PluginType;
@@ -115,7 +114,6 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
         // read parameters from correct block in configuration file
         SubnodeConfiguration config = ConfigPlugins.getProjectAndStepConfig(title, step);
-        String ingestType = config.getString("/ingestType", "prod");
 
         languageCodes = new HashMap<>();
         for (HierarchicalConfiguration hc : config.configurationsAt("/language/code")) {
@@ -183,23 +181,23 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
     public PluginReturnValue run() {
 
         // first check if project was ingested and has a URI
-        if (archeConfiguration.isEnableArcheIngest()) {
-            String projectArcheUrlPropertyName = archeConfiguration.getArcheUrlPropertyName();
-            String projectUri = null;
-
-            for (GoobiProperty gp : project.getProperties()) {
-                if (gp.getPropertyName().equals(projectArcheUrlPropertyName)) {
-                    projectUri = gp.getPropertyValue();
-                    break;
-                }
-            }
-
-            //  abort otherwise
-            if (projectUri == null) {
-                Helper.addMessageToProcessJournal(process.getId(), LogType.ERROR, "Arche Export Error: project was not exported");
-                return PluginReturnValue.ERROR;
-            }
-        }
+        //        if (archeConfiguration.isEnableArcheIngest()) {
+        //            String projectArcheUrlPropertyName = archeConfiguration.getArcheUrlPropertyName();
+        //            String projectUri = null;
+        //
+        //            for (GoobiProperty gp : project.getProperties()) {
+        //                if (gp.getPropertyName().equals(projectArcheUrlPropertyName)) {
+        //                    projectUri = gp.getPropertyValue();
+        //                    break;
+        //                }
+        //            }
+        //
+        //            //  abort otherwise
+        //            if (projectUri == null) {
+        //                Helper.addMessageToProcessJournal(process.getId(), LogType.ERROR, "Arche Export Error: project was not exported");
+        //                return PluginReturnValue.ERROR;
+        //            }
+        //        }
         DocStruct logical = null;
         DocStruct anchor = null;
         Fileformat fileformat = null;
@@ -272,8 +270,13 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         // get language codes from configuration file
         String languageCode = languageCodes.get(language);
 
-        // collection name
-        String topCollectionIdentifier = IDENTIFIER_PREFIX + project.getTitel();
+        // top collection name
+        String topCollectionIdentifier = null;
+        if (StringUtils.isNotBlank(project.getProjectIdentifier())) {
+            topCollectionIdentifier = IDENTIFIER_PREFIX + project.getProjectIdentifier().replace(" ", "_");
+        } else {
+            topCollectionIdentifier = IDENTIFIER_PREFIX + archeConfiguration.getArcheApiUrl().replace(" ", "_");
+        }
 
         // process level
         String collectionIdentifier = topCollectionIdentifier + "/" + process.getTitel();
@@ -284,114 +287,99 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
         model.setNsPrefix("top", topCollectionIdentifier);
 
-        Resource processResource = createCollectionResource(language, logical, files, masterFolder, languageCode, model, collectionIdentifier);
+        Resource processResource =
+                createCollectionResource(language, logical, files, masterFolder, languageCode, model, topCollectionIdentifier, collectionIdentifier,
+                        collectionIdentifier);
 
-        model = ModelFactory.createDefaultModel();
-        model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
-        model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
-        model.setNsPrefix("top", topCollectionIdentifier);
+        Resource masterFolderResource = createFolderResource(model, process.getTitel() + "_master", collectionIdentifier, processResource,
+                false);
 
-        Resource masterFolderResource = createFolderResource(model, process.getTitel() + "_master", collectionIdentifier, processResource);
+        Resource mediaFolderResource = createFolderResource(model, process.getTitel() + "_media", collectionIdentifier, processResource, false);
 
-        model = ModelFactory.createDefaultModel();
-        model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
-        model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
-        model.setNsPrefix("top", topCollectionIdentifier);
-        Resource mediaFolderResource = createFolderResource(model, process.getTitel() + "_media", collectionIdentifier, processResource);
-
-        model = ModelFactory.createDefaultModel();
-        model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
-        model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
-        model.setNsPrefix("top", topCollectionIdentifier);
         Resource altoFolderResource = null;
         if (altoFolder != null) {
-            altoFolderResource = createFolderResource(model, process.getTitel() + "_ocr", collectionIdentifier, processResource);
-            if (exportFolderEnabled) {
-                try (OutputStream out = new FileOutputStream(exportFolder + "altoFolder.ttl")) {
-                    RDFDataMgr.write(out, model, RDFFormat.TURTLE_PRETTY);
-                } catch (IOException e) {
-                    log.error(e);
-                }
-            }
+            altoFolderResource = createFolderResource(model, process.getTitel() + "_ocr", collectionIdentifier, processResource, false);
         }
 
         Resource metaAnchorResource = null;
         if (anchor != null) {
-            model = ModelFactory.createDefaultModel();
-            model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
-            model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
-            model.setNsPrefix("top", topCollectionIdentifier);
+
             metaAnchorResource = createMetadata(anchor, model, collectionIdentifier, processResource);
         }
-        model = ModelFactory.createDefaultModel();
-        model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
-        model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
-        model.setNsPrefix("top", topCollectionIdentifier);
         Resource metaResource = createMetadata(logical, model, collectionIdentifier, processResource);
 
         if (exportFolderEnabled) {
-            try (OutputStream out = new FileOutputStream(exportFolder + process.getTitel() + ".ttl")) {
-                RDFDataMgr.write(out, processResource.getModel(), RDFFormat.TURTLE_PRETTY);
-            } catch (IOException e) {
-                log.error(e);
-            }
-            try (OutputStream out = new FileOutputStream(exportFolder + "masterFolder.ttl")) {
-                RDFDataMgr.write(out, masterFolderResource.getModel(), RDFFormat.TURTLE_PRETTY);
-            } catch (IOException e) {
-                log.error(e);
-            }
-            try (OutputStream out = new FileOutputStream(exportFolder + "mediaFolder.ttl")) {
-                RDFDataMgr.write(out, mediaFolderResource.getModel(), RDFFormat.TURTLE_PRETTY);
-            } catch (IOException e) {
-                log.error(e);
-            }
 
+            Model union1 = ModelFactory.createUnion(processResource.getModel(), masterFolderResource.getModel());
+            Model union = null;
             if (altoFolderResource != null) {
-                try (OutputStream out = new FileOutputStream(exportFolder + "altoFolder.ttl")) {
-                    RDFDataMgr.write(out, altoFolderResource.getModel(), RDFFormat.TURTLE_PRETTY);
-                } catch (IOException e) {
-                    log.error(e);
-                }
-            }
-            if (metaAnchorResource != null) {
-                try (OutputStream out = new FileOutputStream(exportFolder + "meta_anchor.ttl")) {
-                    RDFDataMgr.write(out, metaAnchorResource.getModel(), RDFFormat.TURTLE_PRETTY);
-                } catch (IOException e) {
-                    log.error(e);
-                }
-            }
+                Model union2 = ModelFactory.createUnion(mediaFolderResource.getModel(), altoFolderResource.getModel());
 
-            try (OutputStream out = new FileOutputStream(exportFolder + "meta.ttl")) {
-                RDFDataMgr.write(out, metaResource.getModel(), RDFFormat.TURTLE_PRETTY);
+                union = ModelFactory.createUnion(union1, union2);
+            } else {
+                union = ModelFactory.createUnion(union1, mediaFolderResource.getModel());
+            }
+            try (OutputStream out = new FileOutputStream(exportFolder + process.getTitel() + ".ttl")) {
+                RDFDataMgr.write(out, union, RDFFormat.TURTLE_PRETTY);
             } catch (IOException e) {
                 log.error(e);
             }
+
+            //            try (OutputStream out = new FileOutputStream(exportFolder + process.getTitel() + ".ttl")) {
+            //                RDFDataMgr.write(out, processResource.getModel(), RDFFormat.TURTLE_PRETTY);
+            //            } catch (IOException e) {
+            //                log.error(e);
+            //            }
+            //            try (OutputStream out = new FileOutputStream(exportFolder + "masterFolder.ttl")) {
+            //                RDFDataMgr.write(out, masterFolderResource.getModel(), RDFFormat.TURTLE_PRETTY);
+            //            } catch (IOException e) {
+            //                log.error(e);
+            //            }
+            //            try (OutputStream out = new FileOutputStream(exportFolder + "mediaFolder.ttl")) {
+            //                RDFDataMgr.write(out, mediaFolderResource.getModel(), RDFFormat.TURTLE_PRETTY);
+            //            } catch (IOException e) {
+            //                log.error(e);
+            //            }
+            //
+            //            if (altoFolderResource != null) {
+            //                try (OutputStream out = new FileOutputStream(exportFolder + "altoFolder.ttl")) {
+            //                    RDFDataMgr.write(out, altoFolderResource.getModel(), RDFFormat.TURTLE_PRETTY);
+            //                } catch (IOException e) {
+            //                    log.error(e);
+            //                }
+            //            }
+            //            if (metaAnchorResource != null) {
+            //                try (OutputStream out = new FileOutputStream(exportFolder + "meta_anchor.ttl")) {
+            //                    RDFDataMgr.write(out, metaAnchorResource.getModel(), RDFFormat.TURTLE_PRETTY);
+            //                } catch (IOException e) {
+            //                    log.error(e);
+            //                }
+            //            }
+            //
+            //            try (OutputStream out = new FileOutputStream(exportFolder + "meta.ttl")) {
+            //                RDFDataMgr.write(out, metaResource.getModel(), RDFFormat.TURTLE_PRETTY);
+            //            } catch (IOException e) {
+            //                log.error(e);
+            //            }
         }
 
         List<Resource> anchorMetsResources = null;
         String anchorUri = null;
         if (anchor != null) {
-            model = ModelFactory.createDefaultModel();
-            model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
-            model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
-            model.setNsPrefix("top", topCollectionIdentifier);
 
+            //
             anchorMetsResources = createPublicationResource(anchor, languageCode, model, collectionIdentifier, null);
             anchorUri = anchorMetsResources.get(0).getProperty(model.createProperty(model.getNsPrefixURI("acdh"), "isMetadataFor")).getString();
-            if (exportFolderEnabled) {
-                try (OutputStream out = new FileOutputStream(exportFolder + "mets_anchor.ttl")) {
-                    RDFDataMgr.write(out, metaResource.getModel(), RDFFormat.TURTLE_PRETTY);
-                } catch (IOException e) {
-                    log.error(e);
-                }
-            }
+            //            if (exportFolderEnabled) {
+            //                try (OutputStream out = new FileOutputStream(exportFolder + "mets_anchor.ttl")) {
+            //                    RDFDataMgr.write(out, metaResource.getModel(), RDFFormat.TURTLE_PRETTY);
+            //                } catch (IOException e) {
+            //                    log.error(e);
+            //                }
+            //            }
         }
 
         // topstruct
-        model = ModelFactory.createDefaultModel();
-        model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
-        model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
-        model.setNsPrefix("top", topCollectionIdentifier);
         List<Resource> metsResources = createPublicationResource(logical, languageCode, model, collectionIdentifier,
                 anchorUri);
         if (exportFolderEnabled) {
@@ -401,137 +389,145 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                 log.error(e);
             }
         }
-        Path metaFile = null;
-        Path metaAnchorFile = null;
-        try {
-            metaFile = Paths.get(process.getMetadataFilePath());
-            metaAnchorFile = Paths.get(process.getMetadataFilePath().replace(".xml", "_anchor.xml"));
+        //        Path metaFile = null;
+        //        Path metaAnchorFile = null;
+        //        try {
+        //            metaFile = Paths.get(process.getMetadataFilePath());
+        //            metaAnchorFile = Paths.get(process.getMetadataFilePath().replace(".xml", "_anchor.xml"));
+        //
+        //        } catch (IOException | SwapException e) {
+        //            log.error(e);
+        //        }
 
-        } catch (IOException | SwapException e) {
-            log.error(e);
-        }
-
-        if (archeConfiguration.isEnableArcheIngest()) {
+        if (archeConfiguration.isEnableArcheIngestValidation()) {
             try (Client client =
                     ArcheAPI.getClient(archeConfiguration.getArcheUserName(), archeConfiguration.getArchePassword())) {
                 TransactionInfo ti = ArcheAPI.startTransaction(client, archeConfiguration.getArcheApiUrl());
                 // ingest collection resource
-                String location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, processResource);
+                Resource validationResource = createCollectionResource(language, logical,
+                        files, masterFolder, languageCode, model, topCollectionIdentifier, collectionIdentifier,
+                        archeConfiguration.getArcheApiUrl());
+
+                String location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, validationResource);
                 if (location == null) {
                     // ingest failed, abort
                     return PluginReturnValue.ERROR;
                 }
 
                 // ingest publication resources
-                for (Resource r : metsResources) {
-                    location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, r);
-                    if (location == null) {
-                        // ingest failed, abort
-                        return PluginReturnValue.ERROR;
-                    }
-                }
-
-                if (anchorMetsResources != null) {
-                    for (Resource r : anchorMetsResources) {
-                        location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, r);
-                        if (location == null) {
-                            // ingest failed, abort
-                            return PluginReturnValue.ERROR;
-                        }
-                    }
-                }
-
-                //metadata file resources
-                String metaFileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, metaResource);
-                boolean success = ArcheAPI.uploadBinary(client, metaFileUri, ti, metaFile);
-                if (!success) {
-                    // file upload failed, abort
-                    return PluginReturnValue.ERROR;
-                }
-
-                if (metaAnchorResource != null) {
-                    String metaAnchorUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, metaAnchorResource);
-                    success = ArcheAPI.uploadBinary(client, metaAnchorUri, ti, metaAnchorFile);
-                    if (!success) {
-                        // file upload failed, abort
-                        return PluginReturnValue.ERROR;
-                    }
-                }
-
+                //                for (Resource r : metsResources) {
+                //                    location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, r);
+                //                    if (location == null) {
+                //                        // ingest failed, abort
+                //                        return PluginReturnValue.ERROR;
+                //                    }
+                //                }
+                //
+                //                if (anchorMetsResources != null) {
+                //                    for (Resource r : anchorMetsResources) {
+                //                        location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, r);
+                //                        if (location == null) {
+                //                            // ingest failed, abort
+                //                            return PluginReturnValue.ERROR;
+                //                        }
+                //                    }
+                //                }
+                //
+                //                //metadata file resources
+                //                String metaFileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, metaResource);
+                //                boolean success = ArcheAPI.uploadBinary(client, metaFileUri, ti, metaFile);
+                //                if (!success) {
+                //                    // file upload failed, abort
+                //                    return PluginReturnValue.ERROR;
+                //                }
+                //
+                //                if (metaAnchorResource != null) {
+                //                    String metaAnchorUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, metaAnchorResource);
+                //                    success = ArcheAPI.uploadBinary(client, metaAnchorUri, ti, metaAnchorFile);
+                //                    if (!success) {
+                //                        // file upload failed, abort
+                //                        return PluginReturnValue.ERROR;
+                //                    }
+                //                }
+                //
                 // ingest master folder + files
-                ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, masterFolderResource);
-                List<Path> fileList = files.get(masterFolder);
-                for (Path file : fileList) {
-                    // create file resource, upload file metadata, upload binary
-                    Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
-                            process.getTitel() + "_master", file);
-                    if (exportFolderEnabled) {
-                        try (OutputStream out = new FileOutputStream(exportFolder + file.getFileName().toString() + "_master.ttl")) {
-                            RDFDataMgr.write(out, fileResource.getModel(), RDFFormat.TURTLE_PRETTY);
-                        } catch (IOException e) {
-                            log.error(e);
-                        }
-                    }
+                ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti,
+                        createFolderResource(model, process.getTitel() + "_master", collectionIdentifier, processResource, true));
+                //                                List<Path> fileList = files.get(masterFolder);
+                //                                for (Path file : fileList) {
+                //                                    // create file resource, upload file metadata, upload binary
+                //                                    Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
+                //                                            process.getTitel() + "_master", file);
+                //                                    if (exportFolderEnabled) {
+                //                                        try (OutputStream out = new FileOutputStream(exportFolder + file.getFileName().toString() + "_master.ttl")) {
+                //                                            RDFDataMgr.write(out, fileResource.getModel(), RDFFormat.TURTLE_PRETTY);
+                //                                        } catch (IOException e) {
+                //                                            log.error(e);
+                //                                        }
+                //                                    }
+                //
+                //                    String fileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, fileResource);
+                //                    success = ArcheAPI.uploadBinary(client, fileUri, ti, file);
+                //                    if (!success) {
+                //                        // file upload failed, abort
+                //                        return PluginReturnValue.ERROR;
+                //                    }
+                //                }
+                //
+                //                // ingest media files
+                //                ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, mediaFolderResource);
+                //                fileList = files.get(mediaFolder);
+                //                for (Path file : fileList) {
+                //                    // create file resource, upload file metadata, upload binary
+                //                    Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
+                //                            process.getTitel() + "_media", file);
+                //
+                //                    if (exportFolderEnabled) {
+                //                        try (OutputStream out = new FileOutputStream(exportFolder + file.getFileName().toString() + "_media.ttl")) {
+                //                            RDFDataMgr.write(out, fileResource.getModel(), RDFFormat.TURTLE_PRETTY);
+                //                        } catch (IOException e) {
+                //                            log.error(e);
+                //                        }
+                //                    }
+                //                    String fileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, fileResource);
+                //                    success = ArcheAPI.uploadBinary(client, fileUri, ti, file);
+                //                    if (!success) {
+                //                        // file upload failed, abort
+                //                        return PluginReturnValue.ERROR;
+                //                    }
+                //                }
+                //
+                //                if (altoFolder != null) {
+                //                    location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, altoFolderResource);
+                //                    if (location == null) {
+                //                        // ingest failed, abort
+                //                        return PluginReturnValue.ERROR;
+                //                    }
+                //                    fileList = files.get(altoFolder);
+                //                    for (Path file : fileList) {
+                //                        // create file resource, upload file metadata, upload binary
+                //                        Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
+                //                                process.getTitel() + "_ocr", file);
+                //                        if (exportFolderEnabled) {
+                //                            try (OutputStream out = new FileOutputStream(exportFolder + file.getFileName().toString() + "_alto.ttl")) {
+                //                                RDFDataMgr.write(out, fileResource.getModel(), RDFFormat.TURTLE_PRETTY);
+                //                            } catch (IOException e) {
+                //                                log.error(e);
+                //                            }
+                //                        }
+                //                        String fileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, fileResource);
+                //                        success = ArcheAPI.uploadBinary(client, fileUri, ti, file);
+                //                        if (!success) {
+                //                            // file upload failed, abort
+                //                            return PluginReturnValue.ERROR;
+                //                        }
+                //                    }
+                //                }
+                //
+                //                ArcheAPI.finishTransaction(client, archeConfiguration.getArcheApiUrl(), ti);
 
-                    String fileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, fileResource);
-                    success = ArcheAPI.uploadBinary(client, fileUri, ti, file);
-                    if (!success) {
-                        // file upload failed, abort
-                        return PluginReturnValue.ERROR;
-                    }
-                }
-
-                // ingest media files
-                ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, mediaFolderResource);
-                fileList = files.get(mediaFolder);
-                for (Path file : fileList) {
-                    // create file resource, upload file metadata, upload binary
-                    Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
-                            process.getTitel() + "_media", file);
-
-                    if (exportFolderEnabled) {
-                        try (OutputStream out = new FileOutputStream(exportFolder + file.getFileName().toString() + "_media.ttl")) {
-                            RDFDataMgr.write(out, fileResource.getModel(), RDFFormat.TURTLE_PRETTY);
-                        } catch (IOException e) {
-                            log.error(e);
-                        }
-                    }
-                    String fileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, fileResource);
-                    success = ArcheAPI.uploadBinary(client, fileUri, ti, file);
-                    if (!success) {
-                        // file upload failed, abort
-                        return PluginReturnValue.ERROR;
-                    }
-                }
-
-                if (altoFolder != null) {
-                    location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, altoFolderResource);
-                    if (location == null) {
-                        // ingest failed, abort
-                        return PluginReturnValue.ERROR;
-                    }
-                    fileList = files.get(altoFolder);
-                    for (Path file : fileList) {
-                        // create file resource, upload file metadata, upload binary
-                        Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
-                                process.getTitel() + "_ocr", file);
-                        if (exportFolderEnabled) {
-                            try (OutputStream out = new FileOutputStream(exportFolder + file.getFileName().toString() + "_alto.ttl")) {
-                                RDFDataMgr.write(out, fileResource.getModel(), RDFFormat.TURTLE_PRETTY);
-                            } catch (IOException e) {
-                                log.error(e);
-                            }
-                        }
-                        String fileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, fileResource);
-                        success = ArcheAPI.uploadBinary(client, fileUri, ti, file);
-                        if (!success) {
-                            // file upload failed, abort
-                            return PluginReturnValue.ERROR;
-                        }
-                    }
-                }
-
-                ArcheAPI.finishTransaction(client, archeConfiguration.getArcheApiUrl(), ti);
+                ArcheAPI.cancelTransaction(client, location, ti);
+                Helper.setMeldung("Arche validation successful");
             } catch (ProcessingException e) {
                 Helper.setFehlerMeldung("Cannot reach arche API");
                 return PluginReturnValue.ERROR;
@@ -588,9 +584,17 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
     private List<Resource> createPublicationResource(DocStruct docstruct, String languageCode, Model model, String collectionIdentifier,
             String anchorResourceId) {
-        Resource resource =
-                model.createResource(archeConfiguration.getArcheApiUrl(),
-                        model.createResource(model.getNsPrefixURI("acdh") + "Publication"));
+
+        String pubId = null;
+        for (Metadata md : docstruct.getAllMetadata()) {
+            switch (md.getType().getName()) {
+                case "CatalogIDDigital":
+                    String catalogIdDigital = md.getValue();
+                    //        hasIdentifier   1-n     Thing   3   --- See note ---    Build identifier according to form https://id.acdh.oeaw.ac.at/pub-AC02277063, where the last segment of the URI includes the AC identifier from "CatalogIDDigital", prefixed with "pub-"
+                    pubId = IDENTIFIER_PREFIX + "pub-" + catalogIdDigital;
+            }
+        }
+        Resource resource = model.createResource(pubId, model.createResource(model.getNsPrefixURI("acdh") + "Publication"));
 
         List<Resource> resources = new ArrayList<>();
         resources.add(resource);
@@ -623,7 +627,6 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                 case "CatalogIDDigital":
                     String catalogIdDigital = md.getValue();
                     //        hasIdentifier   1-n     Thing   3   --- See note ---    Build identifier according to form https://id.acdh.oeaw.ac.at/pub-AC02277063, where the last segment of the URI includes the AC identifier from "CatalogIDDigital", prefixed with "pub-"
-                    String pubId = IDENTIFIER_PREFIX + "pub-" + catalogIdDigital;
                     resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasIdentifier"), model.createResource(pubId));
                     //        hasNonLinkedIdentifier  0-n     string  4   CatalogIDDigital    e.g. "AC02277063"
                     resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNonLinkedIdentifier"), catalogIdDigital);
@@ -711,14 +714,14 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                         //        hasAuthor   0-n     Agent   73  Author  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
 
                         resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasAuthor"),
-                                model.createResource(createPerson(languageCode, p, resources)));
+                                model.createResource(createPerson(languageCode, p, collectionIdentifier, resources)));
 
                         break;
 
                     case "Editor":
                         //        hasEditor   0-n     Agent   74  Editor  Object of this property should be the URI of the corresponding Agent (Person or Organisation)
                         resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasEditor"),
-                                model.createResource(createPerson(languageCode, p, resources)));
+                                model.createResource(createPerson(languageCode, p, collectionIdentifier, resources)));
                         break;
                     case "OtherPerson", "Lithographer", "Engraver", "Contributor", "Printer", "PublisherPerson":
                         //        hasContributor  0-n     Agent   75  OtherPerson Object of this property should be the URI of the corresponding Agent (Person or Organisation)
@@ -728,7 +731,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                         //        hasContributor  0-n     Agent   75  Printer Object of this property should be the URI of the corresponding Agent (Person or Organisation)
                         //        hasContributor  0-n     Agent   75  PublisherPerson Object of this property should be the URI of the corresponding Agent (Person or Organisation)
                         resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasContributor"),
-                                model.createResource(createPerson(languageCode, p, resources)));
+                                model.createResource(createPerson(languageCode, p, collectionIdentifier, resources)));
                         break;
                     default:
                         // ignore other roles
@@ -741,15 +744,15 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                 switch (c.getType().getName()) {
                     case "CorporateArtist":
                         resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasAuthor"),
-                                model.createResource(createOrganisation(languageCode, c, resources)));
+                                model.createResource(createOrganisation(languageCode, c, collectionIdentifier, resources)));
                         break;
                     case "CorporateEditor":
                         resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasEditor"),
-                                model.createResource(createOrganisation(languageCode, c, resources)));
+                                model.createResource(createOrganisation(languageCode, c, collectionIdentifier, resources)));
                         break;
                     case "CorporateOther", "CorporateEngraver", "CorporateContributor":
                         resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasContributor"),
-                                model.createResource(createOrganisation(languageCode, c, resources)));
+                                model.createResource(createOrganisation(languageCode, c, collectionIdentifier, resources)));
                         break;
                     default:
                         // ignore other roles
@@ -759,7 +762,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         return resources;
     }
 
-    private String createOrganisation(String languageCode, Corporate c, List<Resource> resources) {
+    private String createOrganisation(String languageCode, Corporate c, String collectionIdentifier, List<Resource> resources) {
         String identifier = null;
         if (StringUtils.isNotBlank(c.getAuthorityValue())) {
 
@@ -775,14 +778,13 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         Model model = ModelFactory.createDefaultModel();
         model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
         model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
-        Resource person =
-                model.createResource(archeConfiguration.getArcheApiUrl(), model.createResource(model.getNsPrefixURI("acdh") + "Person"));
         String name = c.getMainName();
+        identifier = collectionIdentifier + name.replaceAll("[\\W]", "_");
 
+        Resource person =
+                model.createResource(identifier, model.createResource(model.getNsPrefixURI("acdh") + "Person"));
         // hasTitle    1       langString  1   firstName + lastName    We cannot use the displayName because we prefer the direct form in ARCHE (i.e., "Friedrich Würthle" instead of "Würthle, Friedrich"). Therefore, it would be better to just have a concatenation of first and last name.
         person.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasTitle"), name, languageCode);
-
-        identifier = name.replaceAll("[\\W]", "_");
 
         person.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasIdentifier"),
                 model.createResource(identifier));
@@ -792,7 +794,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         return identifier;
     }
 
-    private String createPerson(String languageCode, Person p, List<Resource> resources) {
+    private String createPerson(String languageCode, Person p, String collectionIdentifier, List<Resource> resources) {
         String identifier = null;
 
         if (StringUtils.isNotBlank(p.getAuthorityValue())) {
@@ -808,8 +810,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         Model model = ModelFactory.createDefaultModel();
         model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
         model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
-        Resource person =
-                model.createResource(archeConfiguration.getArcheApiUrl(), model.createResource(model.getNsPrefixURI("acdh") + "Person"));
+
         String lastName = p.getLastname();
         String firstName = p.getFirstname();
         String displayName;
@@ -821,13 +822,15 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
             displayName = lastName;
         }
 
+        identifier = collectionIdentifier + displayName.replaceAll("[\\W]", "_");
+        Resource person =
+                model.createResource(identifier, model.createResource(model.getNsPrefixURI("acdh") + "Person"));
         // hasTitle    1       langString  1   firstName + lastName    We cannot use the displayName because we prefer the direct form in ARCHE (i.e., "Friedrich Würthle" instead of "Würthle, Friedrich"). Therefore, it would be better to just have a concatenation of first and last name.
         person.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasTitle"), displayName, languageCode);
         // hasFirstName    0-n     langString  11  firstName
         person.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasFirstName"), firstName, languageCode);
         // hasLastName 0-n     langString  12  lastName
         person.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasLastName"), lastName, languageCode);
-        identifier = displayName.replaceAll("[\\W]", "_");
 
         person.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasIdentifier"),
                 model.createResource(identifier));
@@ -839,13 +842,15 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
     private Resource createFileResource(String id, String topCollectionIdentifier, String collectionIdentifier, Resource processResource,
             String folderName, Path file) {
+
         Model model = ModelFactory.createDefaultModel();
         model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
         model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
         model.setNsPrefix("top", topCollectionIdentifier);
         String filename = process.getTitel() + "_" + file.getFileName().toString();
+        String fileId = collectionIdentifier + "/" + folderName + "/" + filename;
         Resource resource =
-                model.createResource(archeConfiguration.getArcheApiUrl(),
+                model.createResource(fileId,
                         model.createResource(model.getNsPrefixURI("acdh") + "Resource"));
         //        hasAvailableDate    1   1   dateTime    171 --- Will be automatically filled in.
         //        hasCategory 1-n     Concept 47  --- See note ---    "For images: set to https://vocabs.acdh.oeaw.ac.at/archecategory/image
@@ -863,7 +868,6 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         inheritValue(model, processResource, resource, "hasDepositor");
         //        hasHosting  1-n 1   Agent   179 --- Will be automatically filled in.
         //        hasIdentifier   1-n     Thing   3   --- See note ---    Use identifier in the form https://id.acdh.oeaw.ac.at/woldan/RIIIWE3793/RIIIWE3793_master/RIIIWE3793_master_0001.tif (where the last segment of the URI corresponds to the relative filename / title of the Resource).
-        String fileId = collectionIdentifier + "/" + folderName + "/" + filename;
         resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasIdentifier"), model.createResource(fileId));
 
         //        hasLicense  1       Concept 113 --- See note ---    Inherit value from the containing Process
@@ -888,7 +892,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
     private Resource createCollectionResource(String language,
             DocStruct logical, Map<Path, List<Path>> files, Path masterFolder,
-            String languageCode, Model model, String collectionIdentifier) {
+            String languageCode, Model model, String topCollectionIdentifier, String collectionIdentifier, String resourceIdentifier) {
 
         String sortTitle = null;
         String orderNumber = null;
@@ -936,7 +940,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
             dateOfOrigin = publicationyear;
         }
         Resource processResource =
-                model.createResource(archeConfiguration.getArcheApiUrl(),
+                model.createResource(resourceIdentifier,
                         model.createResource(model.getNsPrefixURI("acdh") + "Collection"));
 
         if (StringUtils.isBlank(sortTitle)) {
@@ -1050,14 +1054,15 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasDate"), publicationyear, XSDDatatype.XSDdate);
 
         //        relation    0-n     Thing   139 --- See note ---    Should be the URL of the object in the OBV catalog, e.g. https://permalink.obvsg.at/AC02277063 (it can be automatically created from CatalogIDDigital, I suppose)
-        processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "relation"),
-                model.createLiteral("https://permalink.obvsg.at/" + id));
-
+        //        processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "relation"),
+        //                model.createLiteral("https://permalink.obvsg.at/" + id));
+        //        processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "relation"),
+        //                "https://permalink.obvsg.at/" + id, XSDDatatype.XSDanyURI);
         processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasUrl"),
                 "https://permalink.obvsg.at/" + id, XSDDatatype.XSDanyURI);
 
         processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "isPartOf"),
-                model.createResource(IDENTIFIER_PREFIX + project.getTitel()));
+                model.createResource(topCollectionIdentifier));
 
         return processResource;
     }
@@ -1098,7 +1103,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
             title = process.getTitel() + "_meta.xml";
         }
         Resource metaResource =
-                model.createResource(archeConfiguration.getArcheApiUrl(),
+                model.createResource(metadataId,
                         model.createResource(model.getNsPrefixURI("acdh") + "Metadata"));
 
         // meta.xml, meta_anchor.xml
@@ -1156,10 +1161,19 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         return metaResource;
     }
 
-    private Resource createFolderResource(Model model, String folderName, String collectionIdentifier, Resource processResource) {
+    private Resource createFolderResource(Model model, String folderName, String collectionIdentifier, Resource processResource,
+            boolean ingest) {
+
         String id = collectionIdentifier + "/" + folderName;
+        String resourceIdentifier = null;
+        if (ingest) {
+            resourceIdentifier = archeConfiguration.getArcheApiUrl();
+        } else {
+            resourceIdentifier = id;
+        }
+
         Resource resource =
-                model.createResource(archeConfiguration.getArcheApiUrl(),
+                model.createResource(resourceIdentifier,
                         model.createResource(model.getNsPrefixURI("acdh") + "Collection"));
 
         // folder level, master, media, ocr

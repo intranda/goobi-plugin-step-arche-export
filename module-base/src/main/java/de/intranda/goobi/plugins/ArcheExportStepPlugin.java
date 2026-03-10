@@ -180,24 +180,6 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
     @Override
     public PluginReturnValue run() {
 
-        // first check if project was ingested and has a URI
-        //        if (archeConfiguration.isEnableArcheIngest()) {
-        //            String projectArcheUrlPropertyName = archeConfiguration.getArcheUrlPropertyName();
-        //            String projectUri = null;
-        //
-        //            for (GoobiProperty gp : project.getProperties()) {
-        //                if (gp.getPropertyName().equals(projectArcheUrlPropertyName)) {
-        //                    projectUri = gp.getPropertyValue();
-        //                    break;
-        //                }
-        //            }
-        //
-        //            //  abort otherwise
-        //            if (projectUri == null) {
-        //                Helper.addMessageToProcessJournal(process.getId(), LogType.ERROR, "Arche Export Error: project was not exported");
-        //                return PluginReturnValue.ERROR;
-        //            }
-        //        }
         DocStruct logical = null;
         DocStruct anchor = null;
         Fileformat fileformat = null;
@@ -303,111 +285,110 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
         Resource metaAnchorResource = null;
         if (anchor != null) {
-
             metaAnchorResource = createMetadata(anchor, model, collectionIdentifier, processResource);
         }
         Resource metaResource = createMetadata(logical, model, collectionIdentifier, processResource);
 
+        List<Resource> anchorMetsResources = null;
+        String anchorUri = null;
+        if (anchor != null) {
+
+            anchorMetsResources = createPublicationResource(anchor, languageCode, model, collectionIdentifier, null);
+            anchorUri = anchorMetsResources.get(0).getProperty(model.createProperty(model.getNsPrefixURI("acdh"), "isMetadataFor")).getString();
+
+        }
+
+        // topstruct
+        List<Resource> metsResources = createPublicationResource(logical, languageCode, model, collectionIdentifier,
+                anchorUri);
+
         if (exportFolderEnabled) {
 
+            // folder
             Model union1 = ModelFactory.createUnion(processResource.getModel(), masterFolderResource.getModel());
             Model union = null;
             if (altoFolderResource != null) {
                 Model union2 = ModelFactory.createUnion(mediaFolderResource.getModel(), altoFolderResource.getModel());
-
                 union = ModelFactory.createUnion(union1, union2);
             } else {
                 union = ModelFactory.createUnion(union1, mediaFolderResource.getModel());
             }
+
+            // internal meta.xml
+            if (metaAnchorResource != null) {
+                Model union2 = ModelFactory.createUnion(metaAnchorResource.getModel(), metaResource.getModel());
+                union = ModelFactory.createUnion(union, union2);
+            } else {
+                union = ModelFactory.createUnion(union, metaResource.getModel());
+            }
+
+            // mets files
+            if (anchorMetsResources != null) {
+                for (Resource mets : anchorMetsResources) {
+                    union = ModelFactory.createUnion(union, mets.getModel());
+                }
+            }
+            for (Resource mets : metsResources) {
+                union = ModelFactory.createUnion(union, mets.getModel());
+            }
+
+            // files
+            List<Path> fileList = files.get(masterFolder);
+            for (Path file : fileList) {
+                Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
+                        process.getTitel() + "_master", file);
+                union = ModelFactory.createUnion(union, fileResource.getModel());
+            }
+            fileList = files.get(mediaFolder);
+            for (Path file : fileList) {
+                Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
+                        process.getTitel() + "_media", file);
+                union = ModelFactory.createUnion(union, fileResource.getModel());
+            }
+
+            if (altoFolder != null) {
+                fileList = files.get(altoFolder);
+                for (Path file : fileList) {
+                    Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
+                            process.getTitel() + "_ocr", file);
+                    union = ModelFactory.createUnion(union, fileResource.getModel());
+                }
+            }
+
             try (OutputStream out = new FileOutputStream(exportFolder + process.getTitel() + ".ttl")) {
                 RDFDataMgr.write(out, union, RDFFormat.TURTLE_PRETTY);
             } catch (IOException e) {
                 log.error(e);
             }
 
-            //            try (OutputStream out = new FileOutputStream(exportFolder + process.getTitel() + ".ttl")) {
-            //                RDFDataMgr.write(out, processResource.getModel(), RDFFormat.TURTLE_PRETTY);
-            //            } catch (IOException e) {
-            //                log.error(e);
-            //            }
-            //            try (OutputStream out = new FileOutputStream(exportFolder + "masterFolder.ttl")) {
-            //                RDFDataMgr.write(out, masterFolderResource.getModel(), RDFFormat.TURTLE_PRETTY);
-            //            } catch (IOException e) {
-            //                log.error(e);
-            //            }
-            //            try (OutputStream out = new FileOutputStream(exportFolder + "mediaFolder.ttl")) {
-            //                RDFDataMgr.write(out, mediaFolderResource.getModel(), RDFFormat.TURTLE_PRETTY);
-            //            } catch (IOException e) {
-            //                log.error(e);
-            //            }
-            //
-            //            if (altoFolderResource != null) {
-            //                try (OutputStream out = new FileOutputStream(exportFolder + "altoFolder.ttl")) {
-            //                    RDFDataMgr.write(out, altoFolderResource.getModel(), RDFFormat.TURTLE_PRETTY);
-            //                } catch (IOException e) {
-            //                    log.error(e);
-            //                }
-            //            }
-            //            if (metaAnchorResource != null) {
-            //                try (OutputStream out = new FileOutputStream(exportFolder + "meta_anchor.ttl")) {
-            //                    RDFDataMgr.write(out, metaAnchorResource.getModel(), RDFFormat.TURTLE_PRETTY);
-            //                } catch (IOException e) {
-            //                    log.error(e);
-            //                }
-            //            }
-            //
-            //            try (OutputStream out = new FileOutputStream(exportFolder + "meta.ttl")) {
-            //                RDFDataMgr.write(out, metaResource.getModel(), RDFFormat.TURTLE_PRETTY);
-            //            } catch (IOException e) {
-            //                log.error(e);
-            //            }
+            // copy files to destination
+
+            //image folder
+
+            // meta.xml, meta_anchor.xml
+
+            // mets.xml
+
         }
 
-        List<Resource> anchorMetsResources = null;
-        String anchorUri = null;
-        if (anchor != null) {
-
-            //
-            anchorMetsResources = createPublicationResource(anchor, languageCode, model, collectionIdentifier, null);
-            anchorUri = anchorMetsResources.get(0).getProperty(model.createProperty(model.getNsPrefixURI("acdh"), "isMetadataFor")).getString();
-            //            if (exportFolderEnabled) {
-            //                try (OutputStream out = new FileOutputStream(exportFolder + "mets_anchor.ttl")) {
-            //                    RDFDataMgr.write(out, metaResource.getModel(), RDFFormat.TURTLE_PRETTY);
-            //                } catch (IOException e) {
-            //                    log.error(e);
-            //                }
-            //            }
-        }
-
-        // topstruct
-        List<Resource> metsResources = createPublicationResource(logical, languageCode, model, collectionIdentifier,
-                anchorUri);
-        if (exportFolderEnabled) {
-            try (OutputStream out = new FileOutputStream(exportFolder + "mets.ttl")) {
-                RDFDataMgr.write(out, metaResource.getModel(), RDFFormat.TURTLE_PRETTY);
-            } catch (IOException e) {
-                log.error(e);
-            }
-        }
-        //        Path metaFile = null;
-        //        Path metaAnchorFile = null;
-        //        try {
-        //            metaFile = Paths.get(process.getMetadataFilePath());
-        //            metaAnchorFile = Paths.get(process.getMetadataFilePath().replace(".xml", "_anchor.xml"));
-        //
-        //        } catch (IOException | SwapException e) {
-        //            log.error(e);
-        //        }
-
-        if (archeConfiguration.isEnableArcheIngestValidation()) {
+        if (archeConfiguration.isEnableArcheIngestValidation() || archeConfiguration.isEnableArcheIngestData()) {
             try (Client client =
                     ArcheAPI.getClient(archeConfiguration.getArcheUserName(), archeConfiguration.getArchePassword())) {
                 TransactionInfo ti = ArcheAPI.startTransaction(client, archeConfiguration.getArcheApiUrl());
                 // ingest collection resource
+                model = ModelFactory.createDefaultModel();
+                model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
+                model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
+                model.setNsPrefix("top", topCollectionIdentifier);
                 Resource validationResource = createCollectionResource(language, logical,
                         files, masterFolder, languageCode, model, topCollectionIdentifier, collectionIdentifier,
                         archeConfiguration.getArcheApiUrl());
-
+                model = ModelFactory.createDefaultModel();
+                model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
+                model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
+                model.setNsPrefix("top", topCollectionIdentifier);
+                Resource validationFolderResource =
+                        createFolderResource(model, process.getTitel() + "_master", collectionIdentifier, processResource, true);
                 String location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, validationResource);
                 if (location == null) {
                     // ingest failed, abort
@@ -451,8 +432,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                 //                }
                 //
                 // ingest master folder + files
-                ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti,
-                        createFolderResource(model, process.getTitel() + "_master", collectionIdentifier, processResource, true));
+                ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, validationFolderResource);
                 //                                List<Path> fileList = files.get(masterFolder);
                 //                                for (Path file : fileList) {
                 //                                    // create file resource, upload file metadata, upload binary
@@ -536,47 +516,47 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
         else if (exportFolderEnabled) {
 
-            List<Path> fileList = files.get(masterFolder);
-            for (Path file : fileList) {
-                // create file resource, upload file metadata, upload binary
-                Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
-                        process.getTitel() + "_master", file);
-                try (OutputStream out = new FileOutputStream(exportFolder + file.getFileName().toString() + "_media.ttl")) {
-                    RDFDataMgr.write(out, fileResource.getModel(), RDFFormat.TURTLE_PRETTY);
-                } catch (IOException e) {
-                    log.error(e);
-                }
-
-            }
-
-            // ingest media files
-
-            fileList = files.get(mediaFolder);
-            for (Path file : fileList) {
-                // create file resource, upload file metadata, upload binary
-                Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
-                        process.getTitel() + "_media", file);
-                try (OutputStream out = new FileOutputStream(exportFolder + file.getFileName().toString() + "_media.ttl")) {
-                    RDFDataMgr.write(out, fileResource.getModel(), RDFFormat.TURTLE_PRETTY);
-                } catch (IOException e) {
-                    log.error(e);
-                }
-            }
-
-            if (altoFolder != null) {
-
-                fileList = files.get(altoFolder);
-                for (Path file : fileList) {
-                    // create file resource, upload file metadata, upload binary
-                    Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
-                            process.getTitel() + "_ocr", file);
-                    try (OutputStream out = new FileOutputStream(exportFolder + file.getFileName().toString() + "_alto.ttl")) {
-                        RDFDataMgr.write(out, fileResource.getModel(), RDFFormat.TURTLE_PRETTY);
-                    } catch (IOException e) {
-                        log.error(e);
-                    }
-                }
-            }
+            //            List<Path> fileList = files.get(masterFolder);
+            //            for (Path file : fileList) {
+            //                // create file resource, upload file metadata, upload binary
+            //                Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
+            //                        process.getTitel() + "_master", file);
+            //                try (OutputStream out = new FileOutputStream(exportFolder + file.getFileName().toString() + "_media.ttl")) {
+            //                    RDFDataMgr.write(out, fileResource.getModel(), RDFFormat.TURTLE_PRETTY);
+            //                } catch (IOException e) {
+            //                    log.error(e);
+            //                }
+            //
+            //            }
+            //
+            //            // ingest media files
+            //
+            //            fileList = files.get(mediaFolder);
+            //            for (Path file : fileList) {
+            //                // create file resource, upload file metadata, upload binary
+            //                Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
+            //                        process.getTitel() + "_media", file);
+            //                try (OutputStream out = new FileOutputStream(exportFolder + file.getFileName().toString() + "_media.ttl")) {
+            //                    RDFDataMgr.write(out, fileResource.getModel(), RDFFormat.TURTLE_PRETTY);
+            //                } catch (IOException e) {
+            //                    log.error(e);
+            //                }
+            //            }
+            //
+            //            if (altoFolder != null) {
+            //
+            //                fileList = files.get(altoFolder);
+            //                for (Path file : fileList) {
+            //                    // create file resource, upload file metadata, upload binary
+            //                    Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
+            //                            process.getTitel() + "_ocr", file);
+            //                    try (OutputStream out = new FileOutputStream(exportFolder + file.getFileName().toString() + "_alto.ttl")) {
+            //                        RDFDataMgr.write(out, fileResource.getModel(), RDFFormat.TURTLE_PRETTY);
+            //                    } catch (IOException e) {
+            //                        log.error(e);
+            //                    }
+            //                }
+            //            }
         }
 
         return PluginReturnValue.FINISH;

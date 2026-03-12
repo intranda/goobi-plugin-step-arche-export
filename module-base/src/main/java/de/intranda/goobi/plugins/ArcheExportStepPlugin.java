@@ -6,6 +6,7 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 
 /**
@@ -34,6 +35,7 @@ import java.util.Map.Entry;
 
 import org.apache.commons.configuration.HierarchicalConfiguration;
 import org.apache.commons.configuration.SubnodeConfiguration;
+import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.jena.datatypes.xsd.XSDDatatype;
 import org.apache.jena.rdf.model.Model;
@@ -58,6 +60,7 @@ import org.goobi.production.plugin.interfaces.IStepPluginVersion2;
 
 import de.sub.goobi.config.ConfigPlugins;
 import de.sub.goobi.helper.Helper;
+import de.sub.goobi.helper.StorageProvider;
 import de.sub.goobi.helper.exceptions.SwapException;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.client.Client;
@@ -103,6 +106,8 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
     private Map<String, String> languageCodes;
 
     private Map<String, String> licenseMapping;
+
+    private DecimalFormat counterFormat = new DecimalFormat("0000");
 
     @Override
     public void initialize(Step step, String returnPath) {
@@ -336,6 +341,16 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
             // files
             List<Path> fileList = files.get(masterFolder);
+
+            Path masterDestination = Paths.get(exportFolder, process.getTitel() + "_master");
+            if (!StorageProvider.getInstance().isFileExists(masterDestination)) {
+                try {
+                    StorageProvider.getInstance().createDirectories(masterDestination);
+                } catch (IOException e) {
+                    log.error(e);
+                }
+            }
+
             for (int i = 0; i < fileList.size(); i++) {
                 Path current = fileList.get(i);
                 Path next = null;
@@ -343,10 +358,36 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                     next = fileList.get(i + 1);
                 }
 
+                String currentFilename =
+                        createImageFilename(process.getTitel() + "_master", i, FilenameUtils.getExtension(current.getFileName().toString()));
+
+                String nextFilename = null;
+                if (next != null) {
+                    nextFilename =
+                            createImageFilename(process.getTitel() + "_master", i + 1, FilenameUtils.getExtension(next.getFileName().toString()));
+                }
+
                 Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
-                        process.getTitel() + "_master", current, next);
+                        process.getTitel() + "_master", currentFilename, nextFilename);
                 union = ModelFactory.createUnion(union, fileResource.getModel());
+
+                // copy file to destination
+                try {
+                    StorageProvider.getInstance().copyFile(current, Paths.get(masterDestination.toString(), currentFilename));
+                } catch (IOException e) {
+                    log.error(e);
+                }
             }
+
+            Path mediaDestination = Paths.get(exportFolder, process.getTitel() + "_media");
+            if (!StorageProvider.getInstance().isFileExists(mediaDestination)) {
+                try {
+                    StorageProvider.getInstance().createDirectories(mediaDestination);
+                } catch (IOException e) {
+                    log.error(e);
+                }
+            }
+
             fileList = files.get(mediaFolder);
             for (int i = 0; i < fileList.size(); i++) {
                 Path current = fileList.get(i);
@@ -354,12 +395,37 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                 if (i + 1 < fileList.size()) {
                     next = fileList.get(i + 1);
                 }
+
+                String currentFilename =
+                        createImageFilename(process.getTitel() + "_media", i, FilenameUtils.getExtension(current.getFileName().toString()));
+
+                String nextFilename = null;
+                if (next != null) {
+                    nextFilename =
+                            createImageFilename(process.getTitel() + "_media", i + 1, FilenameUtils.getExtension(next.getFileName().toString()));
+                }
                 Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
-                        process.getTitel() + "_media", current, next);
+                        process.getTitel() + "_media", currentFilename, nextFilename);
                 union = ModelFactory.createUnion(union, fileResource.getModel());
+
+                // copy file to destination
+                try {
+                    StorageProvider.getInstance().copyFile(current, Paths.get(mediaDestination.toString(), currentFilename));
+                } catch (IOException e) {
+                    log.error(e);
+                }
             }
 
             if (altoFolder != null) {
+
+                Path altoDestination = Paths.get(exportFolder, process.getTitel() + "_ocr");
+                if (!StorageProvider.getInstance().isFileExists(altoDestination)) {
+                    try {
+                        StorageProvider.getInstance().createDirectories(altoDestination);
+                    } catch (IOException e) {
+                        log.error(e);
+                    }
+                }
                 fileList = files.get(altoFolder);
                 for (int i = 0; i < fileList.size(); i++) {
                     Path current = fileList.get(i);
@@ -367,9 +433,24 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                     if (i + 1 < fileList.size()) {
                         next = fileList.get(i + 1);
                     }
+                    String currentFilename =
+                            createImageFilename(process.getTitel() + "_ocr", i, FilenameUtils.getExtension(current.getFileName().toString()));
+
+                    String nextFilename = null;
+                    if (next != null) {
+                        nextFilename =
+                                createImageFilename(process.getTitel() + "_ocr", i + 1, FilenameUtils.getExtension(next.getFileName().toString()));
+                    }
                     Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
-                            process.getTitel() + "_ocr", current, next);
+                            process.getTitel() + "_ocr", currentFilename, nextFilename);
                     union = ModelFactory.createUnion(union, fileResource.getModel());
+
+                    // copy file to destination
+                    try {
+                        StorageProvider.getInstance().copyFile(current, Paths.get(altoDestination.toString(), currentFilename));
+                    } catch (IOException e) {
+                        log.error(e);
+                    }
                 }
             }
 
@@ -381,11 +462,44 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
             // copy files to destination
 
-            //image folder
-
             // meta.xml, meta_anchor.xml
+            try {
+                Path metaDestination = Paths.get(exportFolder, process.getTitel() + "_meta.xml");
+                StorageProvider.getInstance().copyFile(Paths.get(process.getMetadataFilePath()), metaDestination);
 
-            // mets.xml
+                Path anchorSource = Paths.get(process.getMetadataFilePath().replace("meta.xml", "meta_anchor.xml"));
+                if (StorageProvider.getInstance().isFileExists(anchorSource)) {
+                    Path anchorDestination = Paths.get(exportFolder, process.getTitel() + "_meta_anchor.xml");
+                    StorageProvider.getInstance().copyFile(anchorSource, anchorDestination);
+                }
+
+            } catch (IOException | SwapException e) {
+                log.error(e);
+            }
+            //            RIIIWE3793
+            //            ├── RIIIWE3793_master
+            //            │   ├── RIIIWE3793_master_0001.tif
+            //            │   ├── RIIIWE3793_master_0002.tif
+            //            │   ├── RIIIWE3793_master_0003.tif
+            //            │   ├── ...
+            //            │   ├── ...
+            //            │   └── RIIIWE3793_master_0544.tif
+            //            ├── RIIIWE3793_media
+            //            │   ├── RIIIWE3793_media_0001.tif
+            //            │   ├── RIIIWE3793_media_0002.tif
+            //            │   ├── RIIIWE3793_media_0003.tif
+            //            │   ├── ...
+            //            │   ├── ...
+            //            │   └── RIIIWE3793_media_0544.tif
+            //            ├── RIIIWE3793_meta.xml
+            //            ├── RIIIWE3793_meta_anchor.xml
+            //            └── RIIIWE3793_ocr
+            //                ├── RIIIWE3793_0001.xml
+            //                ├── RIIIWE3793_0002.xml
+            //                ├── RIIIWE3793_0003.xml
+            //                ├── ...
+            //                ├── ...
+            //                └── RIIIWE3793_0544.xml
 
         }
 
@@ -840,21 +954,20 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
     }
 
     private Resource createFileResource(String id, String topCollectionIdentifier, String collectionIdentifier, Resource processResource,
-            String folderName, Path file, Path nextFile) {
+            String folderName, String currentFile, String nextFile) {
 
         Model model = ModelFactory.createDefaultModel();
         model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
         model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
         model.setNsPrefix("top", topCollectionIdentifier);
-        String filename = file.getFileName().toString();
-        String fileId = collectionIdentifier + "/" + folderName + "/" + filename;
+        String fileId = collectionIdentifier + "/" + folderName + "/" + currentFile;
         Resource resource =
                 model.createResource(fileId,
                         model.createResource(model.getNsPrefixURI("acdh") + "Resource"));
         //        hasAvailableDate    1   1   dateTime    171 --- Will be automatically filled in.
         //        hasCategory 1-n     Concept 47  --- See note ---    "For images: set to https://vocabs.acdh.oeaw.ac.at/archecategory/image
         //        For XML ALTO: set to https://vocabs.acdh.oeaw.ac.at/archecategory/dataset"
-        if (file.getFileName().toString().endsWith(".xml")) {
+        if (currentFile.endsWith(".xml")) {
             resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasCategory"),
                     model.createResource("https://vocabs.acdh.oeaw.ac.at/archecategory/dataset"));
         } else {
@@ -881,14 +994,14 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         inheritValue(model, processResource, resource, "hasRightsHolder");
         //        hasTitle    1       langString  1   --- See note ---    Should be in the form "RIIIWE3793_master_0001.tif" or "RIIIWE3793_media_0001.tif" or "RIIIWE3793_0001.xml" (for XML ALTO files)
 
-        resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasTitle"), filename, "und");
+        resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasTitle"), currentFile, "und");
         //        isPartOf    1-n     CollectionOrPlaceOrPublication  151 --- See note ---    Should have as object the containing collection (e.g., https://id.acdh.oeaw.ac.at/woldan/RIIIWE3793/RIIIWE3793_master)
         resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "isPartOf"),
                 model.createResource(collectionIdentifier + "/" + folderName));
 
         if (nextFile != null) {
             resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNextItem"),
-                    model.createResource(collectionIdentifier + "/" + folderName + "/" + nextFile.getFileName().toString()));
+                    model.createResource(collectionIdentifier + "/" + folderName + "/" + nextFile));
         }
 
         return resource;
@@ -1010,9 +1123,16 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         //        hasLifeCycleStatus  0-1     Concept 42  --- See note ---    "If the process has not been marked as completed yet, set to https://vocabs.acdh.oeaw.ac.at/archelifecyclestatus/active
         //        Otherwise, https://vocabs.acdh.oeaw.ac.at/archelifecyclestatus/completed
         //        But most of the Processes that will be imported into ARCHE should be more or less completed."
-        //TODO
-        processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasLifeCycleStatus"),
-                model.createResource("https://vocabs.acdh.oeaw.ac.at/archelifecyclestatus/completed"));
+
+        if ("100000000".equals(process.getSortHelperStatus())) {
+            processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasLifeCycleStatus"),
+                    model.createResource("https://vocabs.acdh.oeaw.ac.at/archelifecyclestatus/completed"));
+
+        } else {
+            processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasLifeCycleStatus"),
+                    model.createResource("https://vocabs.acdh.oeaw.ac.at/archelifecyclestatus/active"));
+
+        }
 
         //        hasExtent   0-1     langString  46  --- See note ---    We would need a string such as "544 files", where the total numer of master images is computed.
         processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasExtent"), files.get(masterFolder).size() + " images",
@@ -1265,6 +1385,13 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         if (p != null) {
             processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), propertyName), model.createResource(p.getPropertyValue()));
         }
+    }
+
+    private String createImageFilename(String foldername, int counter, String extension) {
+        StringBuilder builder = new StringBuilder();
+        builder.append(foldername).append("_").append(counterFormat.format(counter)).append(".").append(extension);
+
+        return builder.toString();
     }
 
 }

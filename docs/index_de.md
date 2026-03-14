@@ -36,8 +36,8 @@ Für die Verwendung des Plugins muss dieses in einem Arbeitsschritt ausgewählt 
 
 Bevor der Dateningest nach ARCHE beginnen kann, finden eine Reihe von Validierungen statt:
 
-- Zuerst wird geprüft, ob das Projekt, zu dem der Vorgang gehört, in ARCHE existiert. Ist dies nicht der Fall, kein keine Datenlieferung gemacht werden.
-- Anschließend wird geprüft, ob es den master-, media- und optional alto-Ordner gibt. Die Ordner müssen die gleiche Anhahl an Dateien enthalten, die Anzahl muss auch der Anzahl der Seiten in der Paginierung der METS Datei entsprechen.
+- Zuerst wird geprüft, ob das Projekt, zu dem der Vorgang gehört, in ARCHE existiert. Ist dies nicht der Fall, kann keine Datenlieferung gemacht werden.
+- Anschließend wird geprüft, ob es den master-, media- und optional alto-Ordner gibt. Die Ordner müssen die gleiche Anzahl an Dateien enthalten, die Anzahl muss auch der Anzahl der Seiten in der Paginierung der METS Datei entsprechen.
 
 Wenn die Validierung erfolgreich war, beginnen die Vorbereitungen für den Dateningest. Dafür werden die notwendigen URIs für den Vorgang, die einzelnen Ordner und Dateien gebildet.
 
@@ -65,7 +65,7 @@ Die Konfiguration des Plugins erfolgt in der Datei `plugin_intranda_step_arche_e
 
 Parameter               | Erläuterung
 ------------------------|------------------------------------
-`exportFolder`          | Optionaler Order, in dem die generierten RDF-TTL Daten gespeichert werden können.
+`exportFolder`          | Optionaler Ordner, in dem die generierten RDF-TTL Daten gespeichert werden können.
 `language`              | Enthält das Mapping für dreistellige zu zweistellige Sprachcodes
 `code`                  | Definiert das Mapping für einen einzelnen Code. Das Attribut `iso639-1` enthält den zu nutzenden zweistelligen Code,  `iso639-2` den sonst üblichen dreistelligen Code.
 `licenses`              | Enthält eine Liste von Lizenzangaben

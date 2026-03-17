@@ -90,7 +90,7 @@ public class ArcheAPI {
                 return location;
             default:
                 String result = response.readEntity(String.class);
-                String errorMessage = String.format("ARCHE API call %s failed with error code %2d , reson: %s", location, response.getStatus(),
+                String errorMessage = String.format("ARCHE API call %s failed with error code %2d , reason: %s", location, response.getStatus(),
                         result);
                 log.error(errorMessage);
                 Helper.setFehlerMeldung(errorMessage);
@@ -128,7 +128,7 @@ public class ArcheAPI {
 
             default:
                 String result = response.readEntity(String.class);
-                String errorMessage = String.format("ARCHE API call %s failed with error code %2d , reson: %s", baseURI, response.getStatus(),
+                String errorMessage = String.format("ARCHE API call %s failed with error code %2d , reason: %s", baseURI, response.getStatus(),
                         result);
                 log.error(errorMessage);
                 Helper.setFehlerMeldung(errorMessage);
@@ -181,7 +181,7 @@ public class ArcheAPI {
                     break;
                 default:
                     String result = response.readEntity(String.class);
-                    errorMessage = String.format("ARCHE API call %s failed with error code %2d , reson: %s", uri, response.getStatus(),
+                    errorMessage = String.format("ARCHE API call %s failed with error code %2d , reason: %s", uri, response.getStatus(),
                             result);
                     break;
 

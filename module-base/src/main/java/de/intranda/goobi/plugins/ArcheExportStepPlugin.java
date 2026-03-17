@@ -277,37 +277,41 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         Resource processResource =
                 createCollectionResource(language, logical, files, masterFolder, languageCode, model, topCollectionIdentifier, collectionIdentifier,
                         collectionIdentifier);
-
+        String filename = createImageFilename(process.getTitel() + "_master", 1,
+                FilenameUtils.getExtension(files.get(masterFolder).get(0).getFileName().toString()));
         Resource masterFolderResource = createFolderResource(model, process.getTitel() + "_master", collectionIdentifier, processResource,
-                files.get(masterFolder).get(0).getFileName().toString(), false);
+                filename, false);
 
+        filename = createImageFilename(process.getTitel() + "_media", 1,
+                FilenameUtils.getExtension(files.get(mediaFolder).get(0).getFileName().toString()));
         Resource mediaFolderResource = createFolderResource(model, process.getTitel() + "_media", collectionIdentifier, processResource,
-                files.get(mediaFolder).get(0).getFileName().toString(), false);
+                filename, false);
 
         Resource altoFolderResource = null;
         if (altoFolder != null) {
+            filename = createImageFilename(process.getTitel() + "_ocr", 1,
+                    FilenameUtils.getExtension(files.get(altoFolder).get(0).getFileName().toString()));
             altoFolderResource = createFolderResource(model, process.getTitel() + "_ocr", collectionIdentifier, processResource,
-                    files.get(altoFolder).get(0).getFileName().toString(), false);
+                    filename, false);
         }
 
         Resource metaAnchorResource = null;
         if (anchor != null) {
-            metaAnchorResource = createMetadata(anchor, model, collectionIdentifier, processResource);
+            metaAnchorResource = createMetadata(anchor, model, collectionIdentifier, processResource, false);
         }
-        Resource metaResource = createMetadata(logical, model, collectionIdentifier, processResource);
+        Resource metaResource = createMetadata(logical, model, collectionIdentifier, processResource, false);
 
         List<Resource> anchorMetsResources = null;
         String anchorUri = null;
         if (anchor != null) {
-
-            anchorMetsResources = createPublicationResource(anchor, languageCode, model, collectionIdentifier, null);
+            anchorMetsResources = createPublicationResource(anchor, languageCode, model, collectionIdentifier, null, null);
             anchorUri = anchorMetsResources.get(0).getProperty(model.createProperty(model.getNsPrefixURI("acdh"), "isMetadataFor")).getString();
 
         }
 
         // topstruct
         List<Resource> metsResources = createPublicationResource(logical, languageCode, model, collectionIdentifier,
-                anchorUri);
+                anchorUri, null);
 
         if (exportFolderEnabled) {
 
@@ -359,16 +363,16 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                 }
 
                 String currentFilename =
-                        createImageFilename(process.getTitel() + "_master", i, FilenameUtils.getExtension(current.getFileName().toString()));
+                        createImageFilename(process.getTitel() + "_master", i + 1, FilenameUtils.getExtension(current.getFileName().toString()));
 
                 String nextFilename = null;
                 if (next != null) {
                     nextFilename =
-                            createImageFilename(process.getTitel() + "_master", i + 1, FilenameUtils.getExtension(next.getFileName().toString()));
+                            createImageFilename(process.getTitel() + "_master", i + 2, FilenameUtils.getExtension(next.getFileName().toString()));
                 }
 
                 Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
-                        process.getTitel() + "_master", currentFilename, nextFilename);
+                        process.getTitel() + "_master", currentFilename, nextFilename, false);
                 union = ModelFactory.createUnion(union, fileResource.getModel());
 
                 // copy file to destination
@@ -397,15 +401,15 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                 }
 
                 String currentFilename =
-                        createImageFilename(process.getTitel() + "_media", i, FilenameUtils.getExtension(current.getFileName().toString()));
+                        createImageFilename(process.getTitel() + "_media", i + 1, FilenameUtils.getExtension(current.getFileName().toString()));
 
                 String nextFilename = null;
                 if (next != null) {
                     nextFilename =
-                            createImageFilename(process.getTitel() + "_media", i + 1, FilenameUtils.getExtension(next.getFileName().toString()));
+                            createImageFilename(process.getTitel() + "_media", i + 2, FilenameUtils.getExtension(next.getFileName().toString()));
                 }
                 Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
-                        process.getTitel() + "_media", currentFilename, nextFilename);
+                        process.getTitel() + "_media", currentFilename, nextFilename, false);
                 union = ModelFactory.createUnion(union, fileResource.getModel());
 
                 // copy file to destination
@@ -434,15 +438,15 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                         next = fileList.get(i + 1);
                     }
                     String currentFilename =
-                            createImageFilename(process.getTitel() + "_ocr", i, FilenameUtils.getExtension(current.getFileName().toString()));
+                            createImageFilename(process.getTitel() + "_ocr", i + 1, FilenameUtils.getExtension(current.getFileName().toString()));
 
                     String nextFilename = null;
                     if (next != null) {
                         nextFilename =
-                                createImageFilename(process.getTitel() + "_ocr", i + 1, FilenameUtils.getExtension(next.getFileName().toString()));
+                                createImageFilename(process.getTitel() + "_ocr", i + 2, FilenameUtils.getExtension(next.getFileName().toString()));
                     }
                     Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
-                            process.getTitel() + "_ocr", currentFilename, nextFilename);
+                            process.getTitel() + "_ocr", currentFilename, nextFilename, false);
                     union = ModelFactory.createUnion(union, fileResource.getModel());
 
                     // copy file to destination
@@ -476,34 +480,19 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
             } catch (IOException | SwapException e) {
                 log.error(e);
             }
-            //            RIIIWE3793
-            //            ├── RIIIWE3793_master
-            //            │   ├── RIIIWE3793_master_0001.tif
-            //            │   ├── RIIIWE3793_master_0002.tif
-            //            │   ├── RIIIWE3793_master_0003.tif
-            //            │   ├── ...
-            //            │   ├── ...
-            //            │   └── RIIIWE3793_master_0544.tif
-            //            ├── RIIIWE3793_media
-            //            │   ├── RIIIWE3793_media_0001.tif
-            //            │   ├── RIIIWE3793_media_0002.tif
-            //            │   ├── RIIIWE3793_media_0003.tif
-            //            │   ├── ...
-            //            │   ├── ...
-            //            │   └── RIIIWE3793_media_0544.tif
-            //            ├── RIIIWE3793_meta.xml
-            //            ├── RIIIWE3793_meta_anchor.xml
-            //            └── RIIIWE3793_ocr
-            //                ├── RIIIWE3793_0001.xml
-            //                ├── RIIIWE3793_0002.xml
-            //                ├── RIIIWE3793_0003.xml
-            //                ├── ...
-            //                ├── ...
-            //                └── RIIIWE3793_0544.xml
-
         }
 
         if (archeConfiguration.isEnableArcheIngestValidation() || archeConfiguration.isEnableArcheIngestData()) {
+            Path metaFile = null;
+            Path metaAnchorFile = null;
+            try {
+                metaFile = Paths.get(process.getMetadataFilePath());
+                metaAnchorFile = Paths.get(process.getMetadataFilePath().replace(".xml", "_anchor.xml"));
+
+            } catch (IOException | SwapException e) {
+                log.error(e);
+            }
+
             try (Client client =
                     ArcheAPI.getClient(archeConfiguration.getArcheUserName(), archeConfiguration.getArchePassword())) {
                 TransactionInfo ti = ArcheAPI.startTransaction(client, archeConfiguration.getArcheApiUrl());
@@ -520,6 +509,8 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                 model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
                 model.setNsPrefix("top", topCollectionIdentifier);
 
+                boolean success = true;
+
                 String location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, validationResource);
                 if (location == null) {
                     // ingest failed, abort
@@ -527,176 +518,203 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                 }
 
                 // ingest publication resources
-                //                for (Resource r : metsResources) {
-                //                    location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, r);
-                //                    if (location == null) {
-                //                        // ingest failed, abort
-                //                        return PluginReturnValue.ERROR;
-                //                    }
-                //                }
-                //
-                //                if (anchorMetsResources != null) {
-                //                    for (Resource r : anchorMetsResources) {
-                //                        location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, r);
-                //                        if (location == null) {
-                //                            // ingest failed, abort
-                //                            return PluginReturnValue.ERROR;
-                //                        }
-                //                    }
-                //                }
-                //
-                //                //metadata file resources
-                //                String metaFileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, metaResource);
-                //                boolean success = ArcheAPI.uploadBinary(client, metaFileUri, ti, metaFile);
-                //                if (!success) {
-                //                    // file upload failed, abort
-                //                    return PluginReturnValue.ERROR;
-                //                }
-                //
-                //                if (metaAnchorResource != null) {
-                //                    String metaAnchorUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, metaAnchorResource);
-                //                    success = ArcheAPI.uploadBinary(client, metaAnchorUri, ti, metaAnchorFile);
-                //                    if (!success) {
-                //                        // file upload failed, abort
-                //                        return PluginReturnValue.ERROR;
-                //                    }
-                //                }
-                //
-                // ingest master folder + files
-                //                Resource validationFolderResource =
-                //                        createFolderResource(model, process.getTitel() + "_master", collectionIdentifier, processResource, true);
-                //                ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, validationFolderResource);
-                //                                List<Path> fileList = files.get(masterFolder);
-                //                                for (Path file : fileList) {
-                //                                    // create file resource, upload file metadata, upload binary
-                //                                    Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
-                //                                            process.getTitel() + "_master", file);
-                //                                    if (exportFolderEnabled) {
-                //                                        try (OutputStream out = new FileOutputStream(exportFolder + file.getFileName().toString() + "_master.ttl")) {
-                //                                            RDFDataMgr.write(out, fileResource.getModel(), RDFFormat.TURTLE_PRETTY);
-                //                                        } catch (IOException e) {
-                //                                            log.error(e);
-                //                                        }
-                //                                    }
-                //
-                //                    String fileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, fileResource);
-                //                    success = ArcheAPI.uploadBinary(client, fileUri, ti, file);
-                //                    if (!success) {
-                //                        // file upload failed, abort
-                //                        return PluginReturnValue.ERROR;
-                //                    }
-                //                }
-                //
-                //                // ingest media files
-                //                ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, mediaFolderResource);
-                //                fileList = files.get(mediaFolder);
-                //                for (Path file : fileList) {
-                //                    // create file resource, upload file metadata, upload binary
-                //                    Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
-                //                            process.getTitel() + "_media", file);
-                //
-                //                    if (exportFolderEnabled) {
-                //                        try (OutputStream out = new FileOutputStream(exportFolder + file.getFileName().toString() + "_media.ttl")) {
-                //                            RDFDataMgr.write(out, fileResource.getModel(), RDFFormat.TURTLE_PRETTY);
-                //                        } catch (IOException e) {
-                //                            log.error(e);
-                //                        }
-                //                    }
-                //                    String fileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, fileResource);
-                //                    success = ArcheAPI.uploadBinary(client, fileUri, ti, file);
-                //                    if (!success) {
-                //                        // file upload failed, abort
-                //                        return PluginReturnValue.ERROR;
-                //                    }
-                //                }
-                //
-                //                if (altoFolder != null) {
-                //                    location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, altoFolderResource);
-                //                    if (location == null) {
-                //                        // ingest failed, abort
-                //                        return PluginReturnValue.ERROR;
-                //                    }
-                //                    fileList = files.get(altoFolder);
-                //                    for (Path file : fileList) {
-                //                        // create file resource, upload file metadata, upload binary
-                //                        Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
-                //                                process.getTitel() + "_ocr", file);
-                //                        if (exportFolderEnabled) {
-                //                            try (OutputStream out = new FileOutputStream(exportFolder + file.getFileName().toString() + "_alto.ttl")) {
-                //                                RDFDataMgr.write(out, fileResource.getModel(), RDFFormat.TURTLE_PRETTY);
-                //                            } catch (IOException e) {
-                //                                log.error(e);
-                //                            }
-                //                        }
-                //                        String fileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, fileResource);
-                //                        success = ArcheAPI.uploadBinary(client, fileUri, ti, file);
-                //                        if (!success) {
-                //                            // file upload failed, abort
-                //                            return PluginReturnValue.ERROR;
-                //                        }
-                //                    }
-                //                }
-                //
-                //                ArcheAPI.finishTransaction(client, archeConfiguration.getArcheApiUrl(), ti);
+                if (anchor != null) {
+                    model = ModelFactory.createDefaultModel();
+                    model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
+                    model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
+                    model.setNsPrefix("top", topCollectionIdentifier);
+                    anchorMetsResources =
+                            createPublicationResource(anchor, languageCode, model, collectionIdentifier, null, archeConfiguration.getArcheApiUrl());
+                    for (Resource r : anchorMetsResources) {
+                        location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, r);
+                        if (location == null) {
+                            // ingest failed, abort
+                            return PluginReturnValue.ERROR;
+                        }
+                    }
+                }
+                model = ModelFactory.createDefaultModel();
+                model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
+                model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
+                model.setNsPrefix("top", topCollectionIdentifier);
+                // topstruct
+                metsResources = createPublicationResource(logical, languageCode, model, collectionIdentifier,
+                        anchorUri, archeConfiguration.getArcheApiUrl());
+                for (Resource r : metsResources) {
+                    location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, r);
+                    if (location == null) {
+                        // ingest failed, abort
+                        return PluginReturnValue.ERROR;
+                    }
+                }
 
-                ArcheAPI.cancelTransaction(client, location, ti);
-                Helper.setMeldung("Arche validation successful");
+                if (archeConfiguration.isEnableArcheIngestData()) {
+                    // upload meta_anchor.xml
+                    if (metaAnchorResource != null) {
+                        model = ModelFactory.createDefaultModel();
+                        model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
+                        model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
+                        model.setNsPrefix("top", topCollectionIdentifier);
+                        metaAnchorResource = createMetadata(anchor, model, collectionIdentifier, processResource, true);
+                        location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, metaAnchorResource);
+                        if (location == null) {
+                            // ingest failed, abort
+                            return PluginReturnValue.ERROR;
+                        }
+                        success = ArcheAPI.uploadBinary(client, location, ti, metaAnchorFile);
+                        if (!success) {
+                            // file upload failed, abort
+                            return PluginReturnValue.ERROR;
+                        }
+                    }
+                    // upload meta.xml
+                    model = ModelFactory.createDefaultModel();
+                    model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
+                    model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
+                    model.setNsPrefix("top", topCollectionIdentifier);
+                    metaResource = createMetadata(logical, model, collectionIdentifier, processResource, true);
+                    location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, metaResource);
+                    if (location == null) {
+                        // ingest failed, abort
+                        return PluginReturnValue.ERROR;
+                    }
+                    success = ArcheAPI.uploadBinary(client, location, ti, metaFile);
+                    if (!success) {
+                        // file upload failed, abort
+                        return PluginReturnValue.ERROR;
+                    }
+
+                    // ingest master folder and files
+                    model = ModelFactory.createDefaultModel();
+                    model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
+                    model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
+                    model.setNsPrefix("top", topCollectionIdentifier);
+                    filename = createImageFilename(process.getTitel() + "_master", 1,
+                            FilenameUtils.getExtension(files.get(masterFolder).get(0).getFileName().toString()));
+                    masterFolderResource = createFolderResource(model, process.getTitel() + "_master", collectionIdentifier, processResource,
+                            filename, true);
+
+                    ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, masterFolderResource);
+                    List<Path> fileList = files.get(masterFolder);
+                    success = ingestFiles(fileList, "_master", id, topCollectionIdentifier, collectionIdentifier, processResource, client, ti);
+                    if (!success) {
+                        // file upload failed, abort
+                        return PluginReturnValue.ERROR;
+                    }
+
+                    model = ModelFactory.createDefaultModel();
+                    model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
+                    model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
+                    model.setNsPrefix("top", topCollectionIdentifier);
+                    filename = createImageFilename(process.getTitel() + "_media", 1,
+                            FilenameUtils.getExtension(files.get(mediaFolder).get(0).getFileName().toString()));
+                    masterFolderResource = createFolderResource(model, process.getTitel() + "_media", collectionIdentifier, processResource,
+                            filename, true);
+
+                    ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, masterFolderResource);
+                    fileList = files.get(mediaFolder);
+                    success = ingestFiles(fileList, "_media", id, topCollectionIdentifier, collectionIdentifier, processResource, client, ti);
+                    if (!success) {
+                        // file upload failed, abort
+                        return PluginReturnValue.ERROR;
+                    }
+
+                    if (altoFolder != null) {
+                        model = ModelFactory.createDefaultModel();
+                        model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
+                        model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
+                        model.setNsPrefix("top", topCollectionIdentifier);
+                        filename = createImageFilename(process.getTitel() + "_ocr", 1,
+                                FilenameUtils.getExtension(files.get(altoFolder).get(0).getFileName().toString()));
+                        masterFolderResource = createFolderResource(model, process.getTitel() + "_ocr", collectionIdentifier, processResource,
+                                filename, true);
+
+                        ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, masterFolderResource);
+                        fileList = files.get(altoFolder);
+                        success = ingestFiles(fileList, "_ocr", id, topCollectionIdentifier, collectionIdentifier, processResource, client, ti);
+                        if (!success) {
+                            // file upload failed, abort
+                            return PluginReturnValue.ERROR;
+                        }
+
+                    }
+                    //                    location = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, altoFolderResource);
+                    //                    if (location == null) {
+                    //                        // ingest failed, abort
+                    //                        return PluginReturnValue.ERROR;
+                    //                    }
+                    //                    fileList = files.get(altoFolder);
+                    //                    for (Path file : fileList) {
+                    //                        // create file resource, upload file metadata, upload binary
+                    //                        Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
+                    //                                process.getTitel() + "_ocr", file);
+                    //                        if (exportFolderEnabled) {
+                    //                            try (OutputStream out = new FileOutputStream(exportFolder + file.getFileName().toString() + "_alto.ttl")) {
+                    //                                RDFDataMgr.write(out, fileResource.getModel(), RDFFormat.TURTLE_PRETTY);
+                    //                            } catch (IOException e) {
+                    //                                log.error(e);
+                    //                            }
+                    //                        }
+                    //                        String fileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, fileResource);
+                    //                        success = ArcheAPI.uploadBinary(client, fileUri, ti, file);
+                    //                        if (!success) {
+                    //                            // file upload failed, abort
+                    //                            return PluginReturnValue.ERROR;
+                    //                        }
+                    //                    }
+                    //                }
+                    //
+                    ArcheAPI.finishTransaction(client, archeConfiguration.getArcheApiUrl(), ti);
+                    Helper.setMeldung("Arche ingest successful");
+                } else {
+
+                    ArcheAPI.cancelTransaction(client, archeConfiguration.getArcheApiUrl(), ti);
+                    Helper.setMeldung("Arche validation successful");
+                }
             } catch (ProcessingException e) {
                 Helper.setFehlerMeldung("Cannot reach arche API");
                 return PluginReturnValue.ERROR;
             }
         }
 
-        else if (exportFolderEnabled) {
-
-            //            List<Path> fileList = files.get(masterFolder);
-            //            for (Path file : fileList) {
-            //                // create file resource, upload file metadata, upload binary
-            //                Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
-            //                        process.getTitel() + "_master", file);
-            //                try (OutputStream out = new FileOutputStream(exportFolder + file.getFileName().toString() + "_media.ttl")) {
-            //                    RDFDataMgr.write(out, fileResource.getModel(), RDFFormat.TURTLE_PRETTY);
-            //                } catch (IOException e) {
-            //                    log.error(e);
-            //                }
-            //
-            //            }
-            //
-            //            // ingest media files
-            //
-            //            fileList = files.get(mediaFolder);
-            //            for (Path file : fileList) {
-            //                // create file resource, upload file metadata, upload binary
-            //                Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
-            //                        process.getTitel() + "_media", file);
-            //                try (OutputStream out = new FileOutputStream(exportFolder + file.getFileName().toString() + "_media.ttl")) {
-            //                    RDFDataMgr.write(out, fileResource.getModel(), RDFFormat.TURTLE_PRETTY);
-            //                } catch (IOException e) {
-            //                    log.error(e);
-            //                }
-            //            }
-            //
-            //            if (altoFolder != null) {
-            //
-            //                fileList = files.get(altoFolder);
-            //                for (Path file : fileList) {
-            //                    // create file resource, upload file metadata, upload binary
-            //                    Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
-            //                            process.getTitel() + "_ocr", file);
-            //                    try (OutputStream out = new FileOutputStream(exportFolder + file.getFileName().toString() + "_alto.ttl")) {
-            //                        RDFDataMgr.write(out, fileResource.getModel(), RDFFormat.TURTLE_PRETTY);
-            //                    } catch (IOException e) {
-            //                        log.error(e);
-            //                    }
-            //                }
-            //            }
-        }
-
         return PluginReturnValue.FINISH;
     }
 
+    private boolean ingestFiles(List<Path> fileList, String folderPrefix, String id, String topCollectionIdentifier,
+            String collectionIdentifier, Resource processResource, Client client, TransactionInfo ti) {
+        boolean success;
+        for (int i = 0; i < fileList.size(); i++) {
+            Path current = fileList.get(i);
+            Path next = null;
+            if (i + 1 < fileList.size()) {
+                next = fileList.get(i + 1);
+            }
+
+            String currentFilename =
+                    createImageFilename(process.getTitel() + folderPrefix, i + 1, FilenameUtils.getExtension(current.getFileName().toString()));
+
+            String nextFilename = null;
+            if (next != null) {
+                nextFilename =
+                        createImageFilename(process.getTitel() + folderPrefix, i + 2, FilenameUtils.getExtension(next.getFileName().toString()));
+            }
+
+            Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
+                    process.getTitel() + folderPrefix, currentFilename, nextFilename, true);
+            String fileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, fileResource);
+            if (archeConfiguration.isEnableArcheIngestData()) {
+                success = ArcheAPI.uploadBinary(client, fileUri, ti, current);
+                if (!success) {
+                    // file upload failed, abort
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     private List<Resource> createPublicationResource(DocStruct docstruct, String languageCode, Model model, String collectionIdentifier,
-            String anchorResourceId) {
+            String anchorResourceId, String resourceIdentifier) {
 
         String pubId = null;
         for (Metadata md : docstruct.getAllMetadata()) {
@@ -707,7 +725,12 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                     pubId = IDENTIFIER_PREFIX + "pub-" + catalogIdDigital;
             }
         }
-        Resource resource = model.createResource(pubId, model.createResource(model.getNsPrefixURI("acdh") + "Publication"));
+
+        if (StringUtils.isBlank(resourceIdentifier)) {
+            resourceIdentifier = pubId;
+        }
+
+        Resource resource = model.createResource(resourceIdentifier, model.createResource(model.getNsPrefixURI("acdh") + "Publication"));
 
         List<Resource> resources = new ArrayList<>();
         resources.add(resource);
@@ -954,15 +977,23 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
     }
 
     private Resource createFileResource(String id, String topCollectionIdentifier, String collectionIdentifier, Resource processResource,
-            String folderName, String currentFile, String nextFile) {
+            String folderName, String currentFile, String nextFile, boolean ingest) {
 
         Model model = ModelFactory.createDefaultModel();
         model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
         model.setNsPrefix("acdh", "https://vocabs.acdh.oeaw.ac.at/schema#");
         model.setNsPrefix("top", topCollectionIdentifier);
+
         String fileId = collectionIdentifier + "/" + folderName + "/" + currentFile;
+        String resourceId;
+        if (ingest) {
+            resourceId = archeConfiguration.getArcheApiUrl();
+        } else {
+            resourceId = fileId;
+        }
+
         Resource resource =
-                model.createResource(fileId,
+                model.createResource(resourceId,
                         model.createResource(model.getNsPrefixURI("acdh") + "Resource"));
         //        hasAvailableDate    1   1   dateTime    171 --- Will be automatically filled in.
         //        hasCategory 1-n     Concept 47  --- See note ---    "For images: set to https://vocabs.acdh.oeaw.ac.at/archecategory/image
@@ -999,10 +1030,10 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "isPartOf"),
                 model.createResource(collectionIdentifier + "/" + folderName));
 
-        if (nextFile != null) {
-            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNextItem"),
-                    model.createResource(collectionIdentifier + "/" + folderName + "/" + nextFile));
-        }
+        //        if (nextFile != null) {
+        //            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNextItem"),
+        //                    model.createResource(collectionIdentifier + "/" + folderName + "/" + nextFile));
+        //        }
 
         return resource;
     }
@@ -1216,7 +1247,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         }
     }
 
-    private Resource createMetadata(DocStruct docstruct, Model model, String collectionIdentifier, Resource processResource) {
+    private Resource createMetadata(DocStruct docstruct, Model model, String collectionIdentifier, Resource processResource, boolean ingest) {
 
         //TODO get license from mets file?
 
@@ -1229,8 +1260,15 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
             metadataId = collectionIdentifier + "/" + process.getTitel() + "_meta.xml";
             title = process.getTitel() + "_meta.xml";
         }
+        String resourceIdentifier = null;
+
+        if (ingest) {
+            resourceIdentifier = archeConfiguration.getArcheApiUrl();
+        } else {
+            resourceIdentifier = metadataId;
+        }
         Resource metaResource =
-                model.createResource(metadataId,
+                model.createResource(resourceIdentifier,
                         model.createResource(model.getNsPrefixURI("acdh") + "Metadata"));
 
         // meta.xml, meta_anchor.xml
@@ -1336,10 +1374,10 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
             createPropertyInResource(model, processResource, "hasOaiSet", "OAISet");
         }
 
-        if (StringUtils.isNotBlank(filename)) {
-            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNextItem"),
-                    model.createResource(resourceIdentifier + "/" + filename));
-        }
+        //        if (StringUtils.isNotBlank(filename)) {
+        //            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNextItem"),
+        //                    model.createResource(resourceIdentifier + "/" + filename));
+        //        }
 
         return resource;
     }

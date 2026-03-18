@@ -110,6 +110,11 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
     private Map<String, String> doctypes;
 
+    private String viewerUrl;
+    private String permalinkUrl;
+    private List<MetadataFieldMapping> metadataMappings;
+    private List<String[]> propertyMappings;
+
     @Override
     public void initialize(Step step, String returnPath) {
         this.step = step;
@@ -134,6 +139,30 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         doctypes = new HashMap<>();
         for (HierarchicalConfiguration hc : config.configurationsAt("/tags/tag")) {
             doctypes.put(hc.getString("@doctype"), hc.getString("@code"));
+        }
+
+        viewerUrl = config.getString("/viewerUrl", "https://viewer.acdh.oeaw.ac.at/viewer");
+        if (viewerUrl.endsWith("/")) {
+            viewerUrl = viewerUrl.substring(0, viewerUrl.length() - 1);
+        }
+        permalinkUrl = config.getString("/permalinkUrl", "https://permalink.obvsg.at/");
+        if (!permalinkUrl.endsWith("/")) {
+            permalinkUrl = permalinkUrl + "/";
+        }
+
+        metadataMappings = new ArrayList<>();
+        for (HierarchicalConfiguration hc : config.configurationsAt("/metadataMappings/metadataMapping")) {
+            metadataMappings.add(new MetadataFieldMapping(
+                    hc.getString("@metadataName"),
+                    hc.getString("@archeField"),
+                    hc.getString("@language", "NO_LANGUAGE")));
+        }
+
+        propertyMappings = new ArrayList<>();
+        for (HierarchicalConfiguration hc : config.configurationsAt("/propertyMappings/propertyMapping")) {
+            propertyMappings.add(new String[] {
+                    hc.getString("@goobiProperty"),
+                    hc.getString("@archeField") });
         }
 
         String destination = config.getString("/exportFolder");
@@ -486,8 +515,6 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                 log.error(e);
             }
 
-            // copy files to destination
-
             // meta.xml, meta_anchor.xml
             try {
                 Path metaDestination = Paths.get(exportFolder, process.getTitel() + "_meta.xml");
@@ -746,40 +773,20 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                     //        hasUrl  0-n     anyURI  30  --- See note ---    Should be the URL of the object in Goobi Viewer, e.g. https://viewer.acdh.oeaw.ac.at/viewer/image/AC02277063
                     if (docstruct.getType().isAnchor()) {
                         resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasUrl"),
-                                "https://viewer.acdh.oeaw.ac.at/viewer/toc/" + catalogIdDigital,
+                                viewerUrl + "/toc/" + catalogIdDigital,
                                 XSDDatatype.XSDanyURI);
                     } else {
                         resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasUrl"),
-                                "https://viewer.acdh.oeaw.ac.at/viewer/image/" + catalogIdDigital,
+                                viewerUrl + "/image/" + catalogIdDigital,
                                 XSDDatatype.XSDanyURI);
                     }
                     break;
-                case "shelfmarksource":
-                    //        hasNonLinkedIdentifier  0-n     string  4   shelfmarksource e.g. "R-III: WE 379"
-                    resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNonLinkedIdentifier"), md.getValue());
-                    break;
-                case "PlaceOfPublication":
-                    //        hasCity 0-n     langString  24  PlaceOfPublication  The object of this property should always be a string.
-                    resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasCity"), md.getValue(), languageCode);
-                    break;
-                case "Note":
-                    //        hasDescription  0-n     langString  40  Note    I see that the values for Note are often separated in different strings. Maybe we need to concatenate them, or at least discuss how to best approach them.
-                    resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasDescription"), md.getValue(), defaultLanguageCode);
-                    break;
-
-                case "PublicationYear":
-                    //        hasIssuedDate   0-1     date    129 PublicationYear
-                    resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasDate"), md.getValue(), XSDDatatype.XSDdate);
-                    break;
                 case "DateOfOrigin":
-                    //        hasDescription  0-n     langString  40  --- See note ---    """We would like to insert here a note about the uncertainty of the date provided in the ARCHE property """"hasDate"""". Therefore, if the Goobi field """"DateOfOrigin"""" presents square brackets (e.g. [1862]), then add acdh:hasNote """"Date is inferred.""""@en, """"Datum ist abgeleitet.""""@de
-                    //        If the Goobi field """"DateOfOrigin"""" presents square brackets and a question mark (e.g. [1862?]), then add acdh:hasNote """"Date is inferred and uncertain.""""@en, """"Datum abgeleitet und unsicher.""""@de
-                    //        If possible, it would be nice to have something like a checkbox in the Goobi interface, where one can specifiy if a date is uncertain and/or inferred from external source."""
+                    //        hasDescription  0-n     langString  40  --- See note ---
                     createDateNote(model, md.getValue(), resource);
                     break;
                 case "DocLanguage":
-                    //        hasLanguage 0-n     Concept 41  DocLanguage Values should be mapped to the controlled vocabulary used by ARCHE: https://vocabs.acdh.oeaw.ac.at/iso6393/
-
+                    //        hasLanguage 0-n     Concept 41  DocLanguage
                     if ("ger".equals(md.getValue())) {
                         resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasLanguage"),
                                 model.createResource("https://vocabs.acdh.oeaw.ac.at/iso6393/deu"));
@@ -788,26 +795,34 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                                 model.createResource("https://vocabs.acdh.oeaw.ac.at/iso6393/" + md.getValue()));
                     }
                     break;
-                case "SizeSourcePrint":
-                    //        hasExtent   0-1     langString  46  SizeSourcePrint
-                    resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasExtent"), md.getValue(), defaultLanguageCode);
-                    break;
-
-                case "CurrentNo":
-                    //        hasSeriesInformation    0-1     langString  58  CurrentNo
-                    resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasSeriesInformation"), md.getValue(), "und");
-                    break;
-                case "OnTheContent":
-                    //        hasNote 0-1     langString  59  OnTheContent
-                    resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNote"), md.getValue(), defaultLanguageCode);
-                    break;
-                case "PublisherName":
-                    //        hasPublisher    0-n     string  77  PublisherName
-                    resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasPublisher"), md.getValue());
-                    break;
-
                 default:
-                    // ignore other metadata
+                    // check configurable metadata mappings
+                    for (MetadataFieldMapping mapping : metadataMappings) {
+                        if (mapping.metadataName.equals(md.getType().getName())) {
+                            switch (mapping.languageMode) {
+                                case "DOC_LANGUAGE":
+                                    resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), mapping.archeField),
+                                            md.getValue(), languageCode);
+                                    break;
+                                case "DEFAULT_LANGUAGE":
+                                    resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), mapping.archeField),
+                                            md.getValue(), defaultLanguageCode);
+                                    break;
+                                case "DATE":
+                                    resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), mapping.archeField),
+                                            md.getValue(), XSDDatatype.XSDdate);
+                                    break;
+                                case "NO_LANGUAGE":
+                                    resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), mapping.archeField), md.getValue());
+                                    break;
+                                default:
+                                    // explicit language tag, e.g. "und", "en"
+                                    resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), mapping.archeField),
+                                            md.getValue(), mapping.languageMode);
+                                    break;
+                            }
+                        }
+                    }
             }
         }
         //       isPartOf    0-n     CollectionOrPlaceOrPublication  151 --- See note ---    In case the Process includes an anchor publication, set the value to the identifier of the anchor publication, which can be taken from field "CatalogIDDigital" with attribute anchorId="true"
@@ -1015,9 +1030,8 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         return resource;
     }
 
-    private Resource createCollectionResource(String language,
-            DocStruct logical, Map<Path, List<Path>> files, Path masterFolder,
-            String languageCode, Model model, String topCollectionIdentifier, String collectionIdentifier, String resourceIdentifier) {
+    private Resource createCollectionResource(String language, DocStruct logical, Map<Path, List<Path>> files, Path masterFolder, String languageCode,
+            Model model, String topCollectionIdentifier, String collectionIdentifier, String resourceIdentifier) {
 
         String sortTitle = null;
         String orderNumber = null;
@@ -1112,12 +1126,12 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNonLinkedIdentifier"), String.valueOf(process.getId()));
 
         //        hasUrl  0-n     anyURI  30  --- See note ---    Should be the URL of the object in Goobi Viewer, e.g. https://viewer.acdh.oeaw.ac.at/viewer/image/AC02277063
-        processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasUrl"), "https://viewer.acdh.oeaw.ac.at/viewer/image/" + id,
+        processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasUrl"), viewerUrl + "/image/" + id,
                 XSDDatatype.XSDanyURI);
 
         //        hasDescription  0-n     langString  40  --- See note ---    We would need a description such as "A collection of scans from: https://permalink.obvsg.at/AC02277063", where the AC identifier of the original publication is given (retrievable from field "CatalogIDDigital"). Maybe this description can be automatically generated?
         processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasDescription"),
-                "A collection of scans from: https://permalink.obvsg.at/" + id,
+                "A collection of scans from: " + permalinkUrl + id,
                 "en");
 
         //        hasLanguage 0-n     Concept 41  DocLanguage Values should be mapped to the controlled vocabulary used by ARCHE: https://vocabs.acdh.oeaw.ac.at/iso6393/
@@ -1150,29 +1164,10 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         //        If the Goobi field ""DateOfOrigin"" presents square brackets and a question mark (e.g. [1862?]), then add acdh:hasNote ""Date is inferred and uncertain.""@en, ""Datum abgeleitet und unsicher.""@de
         createDateNote(model, dateOfOrigin, processResource);
 
-        //        hasContact  0-n     Agent   71  --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the acdh:hasContact property of the whole Project (if this property is added).
-        createPropertyInResource(model, processResource, "hasContact", "contact");
-
-        //        hasDigitisingAgent  0-n     Agent   76  --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the acdh:hasDigitisingAgent property of the whole Project (if this property is added).
-        createPropertyInResource(model, processResource, "hasDigitisingAgent", "digitisingAgent");
-
-        //        hasMetadataCreator  1-n     Agent   80  --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the acdh:hasMetadataCreator property of the whole Project (if this property is added).
-        createPropertyInResource(model, processResource, "hasMetadataCreator", "metadataCreator");
-
-        //        hasOwner    1-n     Agent   110 --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the acdh:hasOwner property of the whole Project (if this property is added).
-        createPropertyInResource(model, processResource, "hasOwner", "owner");
-
-        //        hasRightsHolder 1-n     Agent   111 --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the Rights Holder property of the whole Project.
-        createPropertyInResource(model, processResource, "hasRightsHolder", "rightsHolder");
-
-        //        hasLicensor 1-n     Agent   112 --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the acdh:hasLicensor property of the whole Project (if this property is added).
-        createPropertyInResource(model, processResource, "hasLicensor", "licensor");
-
-        //        hasDepositor    1-n     Agent   170 --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the acdh:hasDepositor property of the whole Project (if this property is added).
-        createPropertyInResource(model, processResource, "hasDepositor", "depositor");
-
-        //        hasCurator  0-n     Agent   178 --- See note ---    Add property to Goobi at the Process level. If the property is not filled in, the value can be copied from the acdh:hasCurator property of the whole Project (if this property is added).
-        createPropertyInResource(model, processResource, "hasCurator", "curator");
+        //        Agent properties - driven by <propertyMappings> in config
+        for (String[] mapping : propertyMappings) {
+            createPropertyInResource(model, processResource, mapping[1], mapping[0]);
+        }
 
         //        hasSubject  0-n     langString  94  --- See note ---    Add label of topStruct here, e.g. "Band"@de and "volume"@en for topStruct "Volume". English labels should preferably have small initial letters.
         for (Entry<String, String> l : logical.getType().getAllLanguages().entrySet()) {
@@ -1192,12 +1187,10 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         //        processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "relation"),
         //                "https://permalink.obvsg.at/" + id, XSDDatatype.XSDanyURI);
         processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasUrl"),
-                "https://permalink.obvsg.at/" + id, XSDDatatype.XSDanyURI);
+                permalinkUrl + id, XSDDatatype.XSDanyURI);
 
         processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "isPartOf"),
                 model.createResource(topCollectionIdentifier));
-
-        // TODO get hasAccessRestriction from metadata ?
 
         return processResource;
     }
@@ -1409,6 +1402,27 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         builder.append(foldername).append("_").append(counterFormat.format(counter)).append(".").append(extension);
 
         return builder.toString();
+    }
+
+    /**
+     * Represents a single configurable Goobi metadata field → ARCHE property mapping for use in createPublicationResource().
+     */
+    private static class MetadataFieldMapping {
+        /** Goobi metadata type name, e.g. "shelfmarksource" */
+        final String metadataName;
+        /** ARCHE property local name, e.g. "hasNonLinkedIdentifier" */
+        final String archeField;
+        /**
+         * Language mode. One of: DOC_LANGUAGE → per-document language code DEFAULT_LANGUAGE → project default language code DATE → typed XSDdate
+         * literal (no language tag) NO_LANGUAGE → plain untagged string literal or any explicit BCP-47 tag, e.g. "und", "en"
+         */
+        final String languageMode;
+
+        MetadataFieldMapping(String metadataName, String archeField, String languageMode) {
+            this.metadataName = metadataName;
+            this.archeField = archeField;
+            this.languageMode = languageMode;
+        }
     }
 
 }

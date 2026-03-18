@@ -1,5 +1,5 @@
 <config_plugin>
-    <!-- order of configuration is: 1.) project name and step name matches 2.) step name matches and project is * 3.) project name matches and step name 
+    <!-- order of configuration is: 1.) project name and step name matches 2.) step name matches and project is * 3.) project name matches and step name
         is * 4.) project name and step name are * -->
 
     <config>
@@ -12,6 +12,14 @@
 
         <exportFolder>/tmp</exportFolder>
 
+        <!-- Base URL of the Goobi Viewer instance (no trailing slash).
+             Used to build hasUrl links like {viewerUrl}/image/{id} and {viewerUrl}/toc/{id}. -->
+        <viewerUrl>https://viewer.acdh.oeaw.ac.at/viewer</viewerUrl>
+
+        <!-- Base URL for catalog permalink links (trailing slash will be added automatically).
+             Used to build hasDescription and hasUrl values like {permalinkUrl}{id}. -->
+        <permalinkUrl>https://permalink.obvsg.at/</permalinkUrl>
+
         <language>
             <code iso639-1="de" iso639-2="ger" />
             <code iso639-1="en" iso639-2="eng" />
@@ -21,7 +29,7 @@
         <licenses>
             <!-- default license, if nothing is configured -->
             <license internalName="" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/publicdomain-1-0" />
-            
+
             <license internalName="PDM" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/publicdomain-1-0" />
             <license internalName="CC0" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/cc0-1-0" />
             <license internalName="CC BY" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/cc-by-4-0" />
@@ -32,6 +40,49 @@
             <license internalName="CC BY-NC-ND" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/cc-by-nc-nd-4-0" />
             <license internalName="reserved" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/inc" />
         </licenses>
+
+        <!-- Configurable Goobi metadata field → ARCHE property mappings for Publication resources.
+             The following special cases are handled in code and must NOT appear here:
+               TitleDocMain, TitleDocSub1 (title assembly)
+               CatalogIDDigital (identifier + hasUrl construction)
+               DateOfOrigin (inferred/uncertain date note)
+               DocLanguage
+
+             @metadataName  Goobi metadata type name
+             @archeField    ARCHE property local name (without namespace prefix)
+             @language      Language mode:
+                              DOC_LANGUAGE     per-document language (from DocLanguage field)
+                              DEFAULT_LANGUAGE project default language (DefaultProjectLanguage property)
+                              DATE             typed xsd:date literal (no language tag)
+                              NO_LANGUAGE      plain untagged string literal
+                              <tag>            any explicit iso tag, e.g. "und", "en", "de"
+        -->
+        <metadataMappings>
+            <metadataMapping metadataName="shelfmarksource"    archeField="hasNonLinkedIdentifier" language="NO_LANGUAGE" />
+            <metadataMapping metadataName="PlaceOfPublication" archeField="hasCity"                language="DOC_LANGUAGE" />
+            <metadataMapping metadataName="Note"               archeField="hasDescription"         language="DEFAULT_LANGUAGE" />
+            <metadataMapping metadataName="PublicationYear"    archeField="hasDate"                language="DATE" />
+            <metadataMapping metadataName="SizeSourcePrint"    archeField="hasExtent"              language="DEFAULT_LANGUAGE" />
+            <metadataMapping metadataName="CurrentNo"          archeField="hasSeriesInformation"   language="und" />
+            <metadataMapping metadataName="OnTheContent"       archeField="hasNote"                language="DEFAULT_LANGUAGE" />
+            <metadataMapping metadataName="PublisherName"      archeField="hasPublisher"           language="NO_LANGUAGE" />
+        </metadataMappings>
+
+        <!-- Configurable Goobi process/project property → ARCHE property mappings.
+             The plugin first checks process-level properties, then falls back to project properties.
+             @goobiProperty  Goobi property name
+             @archeField     ARCHE property local name
+        -->
+        <propertyMappings>
+            <propertyMapping goobiProperty="contact"         archeField="hasContact" />
+            <propertyMapping goobiProperty="digitisingAgent" archeField="hasDigitisingAgent" />
+            <propertyMapping goobiProperty="metadataCreator" archeField="hasMetadataCreator" />
+            <propertyMapping goobiProperty="owner"           archeField="hasOwner" />
+            <propertyMapping goobiProperty="rightsHolder"    archeField="hasRightsHolder" />
+            <propertyMapping goobiProperty="licensor"        archeField="hasLicensor" />
+            <propertyMapping goobiProperty="depositor"       archeField="hasDepositor" />
+            <propertyMapping goobiProperty="curator"         archeField="hasCurator" />
+        </propertyMappings>
 
     </config>
 

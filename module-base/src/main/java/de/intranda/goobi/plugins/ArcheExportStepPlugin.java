@@ -264,9 +264,17 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         if (StringUtils.isBlank(docTypeCode)) {
             docTypeCode = "TEXT";
         }
-        // TODO metadata default language from project property
-
-        String metadataDefaultLanguage = "de";
+        // read metadata default language from project property
+        String languagePropertyName = archeConfiguration.getConfig().getString("/project/languagePropertyName", "DefaultProjectLanguage");
+        String metadataDefaultLanguage = "und"; // default language, if nothing else was defined
+        for (GoobiProperty gp : project.getProperties()) {
+            if (languagePropertyName.equals(gp.getPropertyName())) {
+                if (StringUtils.isNotBlank(gp.getPropertyValue())) {
+                    metadataDefaultLanguage = gp.getPropertyValue();
+                }
+                break;
+            }
+        }
 
         // get language codes from configuration file
         String languageCode = languageCodes.get(language);

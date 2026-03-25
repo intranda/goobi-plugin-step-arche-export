@@ -783,7 +783,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                     break;
                 case "DateOfOrigin":
                     //        hasDescription  0-n     langString  40  --- See note ---
-                    createDateNote(model, md.getValue(), resource);
+                    // TODO: disabled in current arche schema                   createDateNote(model, md.getValue(), resource);
                     break;
                 case "DocLanguage":
                     //        hasLanguage 0-n     Concept 41  DocLanguage
@@ -1191,6 +1191,8 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
         processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "isPartOf"),
                 model.createResource(topCollectionIdentifier));
+
+        // TODO hasAccessRestriction from metadata value?
 
         return processResource;
     }

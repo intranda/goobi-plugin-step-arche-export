@@ -4,7 +4,7 @@
   <parent>
     <groupId>io.goobi.workflow.plugin</groupId>
     <artifactId>plugin-step-arche-export</artifactId>
-    <version>${revision}</version>
+    <version>26.03</version>
   </parent>
   <artifactId>plugin-step-arche-export-lib</artifactId>
   <packaging>jar</packaging>

@@ -26,6 +26,21 @@
             <code iso639-1="und" iso639-2="und" />
         </language>
 
+        <tags>
+            <tag doctype="Monograph" code="TEXT" />
+            <tag doctype="Volume" code="TEXT" />
+            <tag doctype="ContainedWork" code="TEXT" />
+
+            <tag doctype="Atlas" code="IMAGE" />
+            <tag doctype="MapCompilation" code="IMAGE" />
+            <tag doctype="SingleMap" code="IMAGE" />
+            <tag doctype="ViewCompilation" code="IMAGE" />
+            <tag doctype="SingleView" code="IMAGE" />
+            <tag doctype="Globe" code="IMAGE" />
+        </tags>
+
+
+
         <licenses>
             <!-- default license, if nothing is configured -->
             <license internalName="" archeField="https://vocabs.acdh.oeaw.ac.at/archelicenses/publicdomain-1-0" />

@@ -110,6 +110,8 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
     private Map<String, String> doctypes;
 
+    private Map<String, String> accessValues;
+
     private String viewerUrl;
     private String permalinkUrl;
     private List<MetadataFieldMapping> metadataMappings;
@@ -140,6 +142,11 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         for (HierarchicalConfiguration hc : config.configurationsAt("/tags/tag")) {
             doctypes.put(hc.getString("@doctype"), hc.getString("@code"));
         }
+
+        accessValues = new HashMap<>();
+        accessValues.put("public", "https://vocabs.acdh.oeaw.ac.at/archeaccessrestrictions/public");
+        accessValues.put("academic", "https://vocabs.acdh.oeaw.ac.at/archeaccessrestrictions/academic");
+        accessValues.put("restricted", "https://vocabs.acdh.oeaw.ac.at/archeaccessrestrictions/restricted");
 
         viewerUrl = config.getString("/viewerUrl", "https://viewer.acdh.oeaw.ac.at/viewer");
         if (viewerUrl.endsWith("/")) {
@@ -293,6 +300,18 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         if (StringUtils.isBlank(docTypeCode)) {
             docTypeCode = "TEXT";
         }
+
+        String access = "public";
+        for (Metadata md : logical.getAllMetadata()) {
+            if ("RestrictionOnAccess".equals(md.getType().getName())) {
+                access = md.getValue();
+            }
+        }
+
+        if (accessValues.containsKey(access)) {
+            access = accessValues.get(access);
+        }
+
         // read metadata default language from project property
         String languagePropertyName = archeConfiguration.getConfig().getString("/project/languagePropertyName", "DefaultProjectLanguage");
         String metadataDefaultLanguage = "und"; // default language, if nothing else was defined
@@ -423,7 +442,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                 }
 
                 Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
-                        process.getTitel() + "_master", currentFilename, nextFilename, false);
+                        process.getTitel() + "_master", currentFilename, nextFilename, false, access);
                 union = ModelFactory.createUnion(union, fileResource.getModel());
 
                 // copy file to destination
@@ -460,7 +479,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                             createImageFilename(process.getTitel() + "_media", i + 2, FilenameUtils.getExtension(next.getFileName().toString()));
                 }
                 Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
-                        process.getTitel() + "_media", currentFilename, nextFilename, false);
+                        process.getTitel() + "_media", currentFilename, nextFilename, false, access);
                 union = ModelFactory.createUnion(union, fileResource.getModel());
 
                 // copy file to destination
@@ -497,7 +516,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                                 createImageFilename(process.getTitel() + "_ocr", i + 2, FilenameUtils.getExtension(next.getFileName().toString()));
                     }
                     Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
-                            process.getTitel() + "_ocr", currentFilename, nextFilename, false);
+                            process.getTitel() + "_ocr", currentFilename, nextFilename, false, access);
                     union = ModelFactory.createUnion(union, fileResource.getModel());
 
                     // copy file to destination
@@ -622,7 +641,8 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
                     ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, masterFolderResource);
                     List<Path> fileList = files.get(masterFolder);
-                    success = ingestFiles(fileList, "_master", id, topCollectionIdentifier, collectionIdentifier, processResource, client, ti);
+                    success =
+                            ingestFiles(fileList, "_master", id, topCollectionIdentifier, collectionIdentifier, processResource, client, ti, access);
                     if (!success) {
                         // file upload failed, abort
                         return PluginReturnValue.ERROR;
@@ -636,7 +656,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
                     ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, masterFolderResource);
                     fileList = files.get(mediaFolder);
-                    success = ingestFiles(fileList, "_media", id, topCollectionIdentifier, collectionIdentifier, processResource, client, ti);
+                    success = ingestFiles(fileList, "_media", id, topCollectionIdentifier, collectionIdentifier, processResource, client, ti, access);
                     if (!success) {
                         // file upload failed, abort
                         return PluginReturnValue.ERROR;
@@ -651,7 +671,8 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
                         ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, masterFolderResource);
                         fileList = files.get(altoFolder);
-                        success = ingestFiles(fileList, "_ocr", id, topCollectionIdentifier, collectionIdentifier, processResource, client, ti);
+                        success =
+                                ingestFiles(fileList, "_ocr", id, topCollectionIdentifier, collectionIdentifier, processResource, client, ti, access);
                         if (!success) {
                             // file upload failed, abort
                             return PluginReturnValue.ERROR;
@@ -685,7 +706,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
     }
 
     private boolean ingestFiles(List<Path> fileList, String folderPrefix, String id, String topCollectionIdentifier,
-            String collectionIdentifier, Resource processResource, Client client, TransactionInfo ti) {
+            String collectionIdentifier, Resource processResource, Client client, TransactionInfo ti, String access) {
         boolean success;
         for (int i = 0; i < fileList.size(); i++) {
             Path current = fileList.get(i);
@@ -704,7 +725,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
             }
 
             Resource fileResource = createFileResource(id, topCollectionIdentifier, collectionIdentifier, processResource,
-                    process.getTitel() + folderPrefix, currentFilename, nextFilename, true);
+                    process.getTitel() + folderPrefix, currentFilename, nextFilename, true, access);
             String fileUri = ArcheAPI.uploadMetadata(client, archeConfiguration.getArcheApiUrl(), ti, fileResource);
             if (archeConfiguration.isEnableArcheIngestData()) {
                 success = ArcheAPI.uploadBinary(client, fileUri, ti, current);
@@ -969,7 +990,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
     }
 
     private Resource createFileResource(String id, String topCollectionIdentifier, String collectionIdentifier, Resource processResource,
-            String folderName, String currentFile, String nextFile, boolean ingest) {
+            String folderName, String currentFile, String nextFile, boolean ingest, String accessStatus) {
 
         Model model = ModelFactory.createDefaultModel();
         model.setNsPrefix("api", "https://arche.acdh.oeaw.ac.at/api/");
@@ -1025,6 +1046,11 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         if (nextFile != null) {
             resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNextItem"),
                     model.createResource(collectionIdentifier + "/" + folderName + "/" + nextFile));
+        }
+
+        if (StringUtils.isNotBlank(accessStatus)) {
+            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasAccessRestriction"), model.createResource(accessStatus));
+
         }
 
         return resource;
@@ -1191,8 +1217,6 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
         processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "isPartOf"),
                 model.createResource(topCollectionIdentifier));
-
-        // TODO hasAccessRestriction from metadata value?
 
         return processResource;
     }

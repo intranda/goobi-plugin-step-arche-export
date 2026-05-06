@@ -60,6 +60,7 @@ import org.goobi.production.plugin.interfaces.IStepPluginVersion2;
 import de.sub.goobi.config.ConfigPlugins;
 import de.sub.goobi.helper.Helper;
 import de.sub.goobi.helper.StorageProvider;
+import de.sub.goobi.helper.exceptions.DAOException;
 import de.sub.goobi.helper.exceptions.SwapException;
 import jakarta.ws.rs.ProcessingException;
 import jakarta.ws.rs.client.Client;
@@ -235,23 +236,25 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         Path mediaFolder = null;
         Path altoFolder = null;
 
-        for (Path p : files.keySet()) {
-            if (p.getFileName().toString().endsWith("_alto")) {
-                altoFolder = p;
-            } else if (p.getFileName().toString().contains("master")) {
-                masterFolder = p;
-            } else if (p.getFileName().toString().endsWith("_media")) {
-                mediaFolder = p;
-            }
+        try {
+            masterFolder = Paths.get(process.getImagesOrigDirectory(false));
+            mediaFolder = Paths.get(process.getImagesTifDirectory(false));
+            altoFolder = Paths.get(process.getOcrAltoDirectory());
+        } catch (SwapException | IOException | DAOException e) {
+            log.error(e);
+        }
+
+        if (!StorageProvider.getInstance().isFileExists(altoFolder)) {
+            altoFolder = null;
         }
 
         // master folder is missing or empty
-        if (masterFolder == null) {
+        if (!StorageProvider.getInstance().isFileExists(masterFolder)) {
             Helper.setFehlerMeldung("Master image folder not found");
             log.error("Master image folder not found");
             return PluginReturnValue.ERROR;
         }
-        if (mediaFolder == null) {
+        if (!StorageProvider.getInstance().isFileExists(mediaFolder)) {
             Helper.setFehlerMeldung("Media image folder not found");
             log.error("Media image folder not found");
             return PluginReturnValue.ERROR;
@@ -783,6 +786,8 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         //        hasTitle    1       langString  1   TitleDocMain + " : " + TitleDocSub1
         resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasTitle"), altTitle, languageCode);
 
+        StringBuilder noteMetadata = new StringBuilder();
+
         for (Metadata md : docstruct.getAllMetadata()) {
             switch (md.getType().getName()) {
                 case "CatalogIDDigital":
@@ -816,6 +821,12 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                                 model.createResource("https://vocabs.acdh.oeaw.ac.at/iso6393/" + md.getValue()));
                     }
                     break;
+                case "Note":
+                    if (!noteMetadata.isEmpty()) {
+                        noteMetadata.append("\n");
+                    }
+                    noteMetadata.append(md.getValue());
+                    break;
                 default:
                     // check configurable metadata mappings
                     for (MetadataFieldMapping mapping : metadataMappings) {
@@ -832,6 +843,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                                 case "DATE":
                                     resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), mapping.archeField),
                                             md.getValue(), XSDDatatype.XSDdate);
+                                    createDateNote(model, md.getValue(), "hasDescription", resource);
                                     break;
                                 case "NO_LANGUAGE":
                                     resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), mapping.archeField), md.getValue());
@@ -846,6 +858,11 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                     }
             }
         }
+        if (!noteMetadata.isEmpty()) {
+            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasDescription"),
+                    noteMetadata.toString(), defaultLanguageCode);
+        }
+
         //       isPartOf    0-n     CollectionOrPlaceOrPublication  151 --- See note ---    In case the Process includes an anchor publication, set the value to the identifier of the anchor publication, which can be taken from field "CatalogIDDigital" with attribute anchorId="true"
         if (anchorResourceId != null) {
             resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "isPartOf"), anchorResourceId);
@@ -1188,7 +1205,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
 
         //        hasNote 0-1     langString  59  --- See note ---    "We would like to insert here a note about the uncertainty of the date provided in the ARCHE property ""hasDate"". Therefore, if the Goobi field ""DateOfOrigin"" presents square brackets (e.g. [1862]), then add acdh:hasNote ""Date is inferred.""@en, ""Datum ist abgeleitet.""@de
         //        If the Goobi field ""DateOfOrigin"" presents square brackets and a question mark (e.g. [1862?]), then add acdh:hasNote ""Date is inferred and uncertain.""@en, ""Datum abgeleitet und unsicher.""@de
-        createDateNote(model, dateOfOrigin, processResource);
+        createDateNote(model, dateOfOrigin, "hasNote", processResource);
 
         //        Agent properties - driven by <propertyMappings> in config
         for (String[] mapping : propertyMappings) {
@@ -1204,7 +1221,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasLicense"),
                 model.createResource(licenseMapping.get(license)));
 
-        //        hasDate 0-n     date    130 PublicationYgetArcheApiUrl(isProdIngest)ear
+        //        hasDate 0-n     date    130 hasDate
         processResource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasDate"), publicationyear, XSDDatatype.XSDdate);
 
         //        relation    0-n     Thing   139 --- See note ---    Should be the URL of the object in the OBV catalog, e.g. https://permalink.obvsg.at/AC02277063 (it can be automatically created from CatalogIDDigital, I suppose)
@@ -1221,7 +1238,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         return processResource;
     }
 
-    private void createDateNote(Model model, String dateOfOrigin, Resource resource) {
+    private void createDateNote(Model model, String dateOfOrigin, String fieldType, Resource resource) {
         boolean dateIsInferred = false;
         boolean dateIsUncertain = false;
         if (dateOfOrigin != null) {
@@ -1234,14 +1251,14 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         }
 
         if (dateIsInferred && dateIsUncertain) {
-            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNote"), "Date is inferred and uncertain.", "en");
-            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNote"), "Datum abgeleitet und unsicher.", "de");
+            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), fieldType), "Date is inferred and uncertain.", "en");
+            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), fieldType), "Datum abgeleitet und unsicher.", "de");
         } else if (dateIsInferred) {
-            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNote"), "Date is inferred.", "en");
-            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNote"), "Datum abgeleitet.", "de");
+            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), fieldType), "Date is inferred.", "en");
+            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), fieldType), "Datum abgeleitet.", "de");
         } else if (dateIsUncertain) {
-            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNote"), "Date is uncertain.", "en");
-            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasNote"), "Datum unsicher.", "de");
+            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), fieldType), "Date is uncertain.", "en");
+            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), fieldType), "Datum unsicher.", "de");
         }
     }
 

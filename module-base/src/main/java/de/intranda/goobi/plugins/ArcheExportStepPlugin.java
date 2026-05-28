@@ -809,7 +809,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                     break;
                 case "DateOfOrigin":
                     //        hasDescription  0-n     langString  40  --- See note ---
-                    // TODO: disabled in current arche schema                   createDateNote(model, md.getValue(), resource);
+                    createDateNote(model, md.getValue(), "hasDescription", resource);
                     break;
                 case "DocLanguage":
                     //        hasLanguage 0-n     Concept 41  DocLanguage

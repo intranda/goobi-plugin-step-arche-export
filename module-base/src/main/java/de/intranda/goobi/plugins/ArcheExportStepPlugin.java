@@ -378,7 +378,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         String anchorUri = null;
         if (anchor != null) {
             anchorMetsResources = createPublicationResource(anchor, languageCode, model, collectionIdentifier, null, null, metadataDefaultLanguage);
-            anchorUri = anchorMetsResources.get(0).getProperty(model.createProperty(model.getNsPrefixURI("acdh"), "isMetadataFor")).getString();
+            anchorUri = metaAnchorResource.getProperty(model.createProperty(model.getNsPrefixURI("acdh"), "isMetadataFor")).getObject().toString();
 
         }
 
@@ -1385,7 +1385,7 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
                     model.createResource("https://vocabs.acdh.oeaw.ac.at/archeoaisets/kulturpool"));
             resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasTag"), doctTypeCode, "und");
 
-        } else {
+        } else if (folderName.endsWith("media")) {
             createPropertyInResource(model, processResource, "hasOaiSet", "OAISet");
         }
 

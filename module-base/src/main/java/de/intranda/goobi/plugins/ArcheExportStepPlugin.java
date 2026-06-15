@@ -1381,11 +1381,11 @@ public class ArcheExportStepPlugin implements IStepPluginVersion2 {
         if (collectionIdentifier.contains("woldan") && folderName.endsWith("media")) {
             //        In the specific case of Woldan, ONLY instances of acdh:Collection containing the ""media"" images (e.g. https://id.acdh.oeaw.ac.at/woldan/RIIIWE3791/RIIIWE3791_media)
             // will have the value https://vocabs.acdh.oeaw.ac.at/archeoaisets/kulturpool"
-            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasOaiSet"),
-                    model.createResource("https://vocabs.acdh.oeaw.ac.at/archeoaisets/kulturpool"));
+            //            resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasOaiSet"),
+            //                    model.createResource("https://vocabs.acdh.oeaw.ac.at/archeoaisets/kulturpool"));
             resource.addProperty(model.createProperty(model.getNsPrefixURI("acdh"), "hasTag"), doctTypeCode, "und");
-
-        } else if (folderName.endsWith("media")) {
+        }
+        if (folderName.endsWith("media")) {
             createPropertyInResource(model, processResource, "hasOaiSet", "OAISet");
         }
 
